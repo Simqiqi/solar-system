@@ -501,6 +501,7 @@ jupMapTex.wrapT = THREE.ClampToEdgeWrapping;
 {
   const sunTex = loadTex(TEX.sun);
   const mat = new THREE.ShaderMaterial({
+    side: THREE.DoubleSide,
     uniforms: {
       uMap:  { value: sunTex },
       uTime: { value: 0 }
@@ -897,6 +898,12 @@ function animate(){
 
   /* 新增功能逐帧更新：粒子带 / 彗星 / 流星 */
   featureTick(dt);
+
+  /* 太阳近距防穿夹紧：相机距原点(太阳)过近时沿方向拉回，避免穿入太阳内部导致不发光 */
+  const camDist = camera.position.length();
+  if (camDist < 2.6) {
+    camera.position.multiplyScalar(2.6 / (camDist || 1));
+  }
 
   controls.update();
   renderer.render(scene, camera);
