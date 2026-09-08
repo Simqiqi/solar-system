@@ -106,6 +106,48 @@
   .sim-btn.active{color:var(--gold);border-color:rgba(227,180,95,.85)}
   .tips{font-size:11px;line-height:2;color:#5d6a82}
   .tips b{color:var(--gold);font-weight:400}
+  /* ---------- 新增功能控件（时间旅行/音景/提示） ---------- */
+  .ghost-btn{
+    background:none;border:1px solid rgba(227,180,95,.40);
+    color:var(--gold);font:11px/1.6 inherit;letter-spacing:.12em;
+    padding:5px 10px;cursor:pointer;white-space:nowrap;
+    transition:color .15s,border-color .15s,opacity .15s;
+  }
+  .ghost-btn:hover{border-color:rgba(227,180,95,.9);color:#f2d9a4}
+  .ghost-btn:disabled{opacity:.32;cursor:not-allowed}
+  .tt-row{display:flex;gap:6px;align-items:center;margin:12px 0 8px}
+  #timeDate{
+    flex:1;min-width:0;background:transparent;
+    border:1px solid rgba(255,255,255,.12);color:#dfe6f2;
+    font:11px/1.6 inherit;letter-spacing:.04em;padding:4px 6px;
+    color-scheme:dark;border-radius:0;
+  }
+  #timeDate:focus{outline:none;border-color:rgba(227,180,95,.75)}
+  .yr-row{display:flex;align-items:center;gap:8px;margin-bottom:2px}
+  .yr-lab{
+    font-size:11px;color:var(--gold);letter-spacing:.08em;
+    flex:0 0 60px;font-variant-numeric:tabular-nums;
+  }
+  #yearSlider{
+    flex:1;-webkit-appearance:none;appearance:none;height:14px;
+    background:transparent;cursor:pointer;margin:0;
+  }
+  #yearSlider::-webkit-slider-runnable-track{
+    height:2px;background:rgba(255,255,255,.13);
+  }
+  #yearSlider::-webkit-slider-thumb{
+    -webkit-appearance:none;appearance:none;width:9px;height:9px;
+    border-radius:50%;background:var(--gold);border:none;margin-top:-3.5px;
+  }
+  #yearSlider::-moz-range-track{height:2px;background:rgba(255,255,255,.13)}
+  #yearSlider::-moz-range-thumb{width:9px;height:9px;border-radius:50%;background:var(--gold);border:none}
+  .tt-tip{font-size:10px;line-height:1.8;color:#4d5870;margin:2px 0 4px}
+  #listenBtn{width:100%;margin-top:10px;letter-spacing:.18em}
+  #cometNotice{
+    position:absolute;top:16px;right:22px;
+    color:var(--gold);font-size:11px;letter-spacing:.2em;
+    opacity:0;transition:opacity .5s ease;pointer-events:none;
+  }
 </style>
 </head>
 <body>
@@ -152,6 +194,18 @@
     <div class="tips">
       说明：模拟时间以真实历元为基准向前推进；轨道周期与速度使用真实天体参数换算，视觉上做了可读性压缩。行星纹理以科普示意为主。
     </div>
+    <div class="ctl-title">时间旅行 · 真实周期</div>
+    <div class="tt-row">
+      <input type="date" id="timeDate" value="2026-09-08" aria-label="日期">
+      <button class="ghost-btn" id="timeToday">回到今天</button>
+    </div>
+    <div class="yr-row">
+      <span class="yr-lab" id="yrLab">2026 年</span>
+      <input type="range" id="yearSlider" min="1900" max="2200" step="1" value="2026">
+    </div>
+    <div class="tt-tip">拖拽/输入日期后，行星按各自真实公转周期重定位，再继续推进。</div>
+    <div class="ctl-title">聆听 · 行星音景</div>
+    <button class="ghost-btn" id="listenBtn">聆听当前天体</button>
   </aside>
 </div>
 
@@ -225,10 +279,10 @@ function loadTex(url, srgb){
   return t;
 }
 
-/* 灯光 */
+/* 灯光（太阳在原点，用点光源径向照射，行星明暗面随公转自然变化） */
 scene.add(new THREE.AmbientLight(0xffffff, 0.10));
-const sunLight = new THREE.DirectionalLight(0xfff4e0, 3.4);
-sunLight.position.set(60, 22, 40);
+const sunLight = new THREE.PointLight(0xfff4e0, 3.6, 0, 0);   // 无距离衰减
+sunLight.position.set(0, 0, 0);
 scene.add(sunLight);
 const hemi = new THREE.HemisphereLight(0x2a3a63, 0x05070d, 0.28);
 scene.add(hemi);
@@ -841,9 +895,507 @@ function animate(){
   /* 星空缓慢漂移 */
   stars.rotation.y += dt * 0.0025;
 
+  /* 新增功能逐帧更新：粒子带 / 彗星 / 流星 */
+  featureTick(dt);
+
   controls.update();
   renderer.render(scene, camera);
 }
+
+/* =====================================================================
+   新功能追加（内聚单文件）：小行星带+柯伊伯带 / 真实周期时间旅行 /
+   行星音景 Web Audio / 地球夜面城市灯光 / 彗星与流星
+   ===================================================================== */
+const FEATURE = {};
+FEATURE.load = function(url, srgb){
+  const t = new THREE.TextureLoader().load(url);
+  t.colorSpace = (srgb === undefined || srgb) ? THREE.SRGBColorSpace : THREE.NoColorSpace;
+  t.anisotropy = renderer.capabilities.getMaxAnisotropy();
+  return t;
+};
+function featureTick(dt){
+  if (beltAst) updateBelt(beltAst, dt);
+  if (beltKui) updateBelt(beltKui, dt);
+  updateMeteors(dt);
+  trySpawnMeteor();
+  updateComet(dt);
+  trySpawnComet();
+}
+
+/* ---------- 1. 小行星带 + 柯伊伯带（Points 粒子带） ---------- */
+let beltAst = null, beltKui = null;
+function buildBelt(o){
+  const n = o.count;
+  const pos = new Float32Array(n*3), col = new Float32Array(n*3);
+  const ang = new Float32Array(n), rad = new Float32Array(n), w = new Float32Array(n);
+  for (let i=0;i<n;i++){
+    const r = o.r0 + Math.random()*(o.r1-o.r0);
+    const a = Math.random()*Math.PI*2;
+    ang[i]=a; rad[i]=r;
+    w[i] = o.w0 * Math.pow(o.r0/r, o.wPow);
+    pos[i*3]   = Math.cos(a)*r;
+    pos[i*3+1] = (Math.random()*2-1)*o.cyl;
+    pos[i*3+2] = Math.sin(a)*r;
+    const c = o.col();
+    col[i*3]=c[0]; col[i*3+1]=c[1]; col[i*3+2]=c[2];
+  }
+  const geo = new THREE.BufferGeometry();
+  const posAttr = new THREE.BufferAttribute(pos,3);
+  geo.setAttribute('position', posAttr);
+  geo.setAttribute('color', new THREE.BufferAttribute(col,3));
+  const mat = new THREE.PointsMaterial({
+    size: o.size, vertexColors:true, transparent:true,
+    opacity:o.opacity, depthWrite:false, sizeAttenuation:true
+  });
+  scene.add(new THREE.Points(geo, mat));
+  return { ang, rad, w, pos, posAttr, n };
+}
+function updateBelt(d, dt){
+  for (let i=0;i<d.n;i++){
+    d.ang[i] += d.w[i]*dt;
+    if (d.ang[i] > Math.PI*2) d.ang[i] -= Math.PI*2;
+    const r=d.rad[i], a=d.ang[i];
+    d.pos[i*3]   = Math.cos(a)*r;
+    d.pos[i*3+2] = Math.sin(a)*r;
+  }
+  d.posAttr.needsUpdate = true;
+}
+function buildBeltAssets(){
+  beltAst = buildBelt({
+    count: 5200, r0: 12.2, r1: 14.8, cyl: 0.8, size: 0.34, opacity: 0.5,
+    w0: 0.005, wPow: 1.0,
+    col(){ // 灰褐系，少量亮尘
+      const t = Math.random();
+      const b = 0.34 + t*0.20;
+      const br = Math.random()<0.09 ? 0.35 : 0;
+      return [0.44+br+Math.random()*0.14, 0.38+br+Math.random()*0.12, 0.31+br+Math.random()*0.11];
+    }
+  });
+  beltKui = buildBelt({
+    count: 1900, r0: 44, r1: 62, cyl: 2.4, size: 0.20, opacity: 0.42,
+    w0: 0.0022, wPow: 1.0,
+    col(){ // 稀疏冰蓝系
+      const b = Math.random();
+      if (b<0.12) return [0.85, 0.9, 1.0];           // 少量亮冰粒
+      return [0.32+Math.random()*0.26, 0.5+Math.random()*0.22, 0.82+Math.random()*0.14];
+    }
+  });
+}
+
+/* ---------- 4. 地球夜面城市灯光（emissive 风格 shader 壳） ---------- */
+function attachNightShell(){
+  const host = bodies.earth && (bodies.earth.spinMesh || bodies.earth.root);
+  if (!host || !BODY.earth) return;
+  const tex = FEATURE.load('https://www.solarsystemscope.com/textures/download/2k_earth_nightmap.jpg');
+  tex.wrapS = tex.wrapT = THREE.ClampToEdgeWrapping;
+  const mat = new THREE.ShaderMaterial({
+    transparent:true, depthWrite:false, blending:THREE.AdditiveBlending,
+    uniforms:{ uMap:{value:tex}, uN:{value:1.0} },
+    vertexShader:`
+      varying vec2 vUv; varying vec3 vNrm; varying vec3 vPosW;
+      void main(){
+        vUv = uv;
+        vec4 wp = modelMatrix * vec4(position, 1.0);
+        vPosW = wp.xyz;
+        vNrm = normalize(mat3(modelMatrix) * normal);
+        gl_Position = projectionMatrix * viewMatrix * wp;
+      }`,
+    fragmentShader:`
+      uniform sampler2D uMap; uniform float uN;
+      varying vec2 vUv; varying vec3 vNrm; varying vec3 vPosW;
+      void main(){
+        vec3 L = normalize(-vPosW);          // 太阳在原点
+        float day = clamp(dot(normalize(vNrm), L), 0.0, 1.0);
+        float night = 1.0 - smoothstep(0.02, 0.32, day);
+        vec3 lights = texture2D(uMap, vUv).rgb;
+        float lit = smoothstep(0.05, 0.4, max(max(lights.r,lights.g),lights.b));
+        float a = night * (0.08 + lit*0.82);
+        gl_FragColor = vec4(lights * uN * (0.55 + 0.55*lit), a);
+      }`
+  });
+  const shell = new THREE.Mesh(new THREE.SphereGeometry(1.0, 64, 48), mat);
+  shell.scale.setScalar(BODY.earth.visR * 1.006);   // 贴地表之上、云层之下
+  host.add(shell);
+}
+
+/* ---------- 2. 时间旅行：真实公转周期重定位 ---------- */
+const ttDateEl = $('timeDate');
+const ttYearEl = $('yearSlider');
+const yrLabEl = $('yrLab');
+const ttTodayEl = $('timeToday');
+let ttPaused = false, ttPrevMult = 1;
+const PLANET_ANCHOR = { mercury:0.62, venus:2.04, earth:3.82, mars:5.11, jupiter:1.27, saturn:4.51, uranus:0.18, neptune:2.83 };
+function simDateOf(days){ return new Date(epochMs + days*86400000); }
+function clampYear(y){ return Math.max(1900, Math.min(2200, y)); }
+function syncTTControls(){
+  const d = simDateOf(simDays);
+  const p = n => String(n).padStart(2,'0');
+  ttDateEl.value = d.getUTCFullYear()+'-'+p(d.getUTCMonth()+1)+'-'+p(d.getUTCDate());
+  const yr = clampYear(d.getUTCFullYear());
+  ttYearEl.value = String(yr);
+  yrLabEl.textContent = yr + ' 年';
+}
+function pauseSim(){ if (!ttPaused){ ttPaused=true; ttPrevMult=simMult; simMult=0; } }
+function resumeSim(){ if (ttPaused){ ttPaused=false; simMult=ttPrevMult; } }
+function repositionByRealPeriods(days){
+  ORDER.forEach(key => {
+    const b = bodies[key], d = BODY[key];
+    if (!b || !d.periodDays) return;
+    b.angle = (PLANET_ANCHOR[key] || 0) + (days / d.periodDays) * Math.PI * 2;
+  });
+}
+function applyDate(days){
+  pauseSim();
+  simDays = days;
+  repositionByRealPeriods(days);
+  syncTTControls();
+  resumeSim();
+  refreshClock();
+}
+function initTimeTravel(){
+  syncTTControls();
+  ttDateEl.addEventListener('change', () => {
+    if (!ttDateEl.value) return;
+    const t = new Date(ttDateEl.value + 'T00:00:00Z').getTime();
+    if (!isNaN(t)) applyDate((t - epochMs)/86400000);
+  });
+  ttYearEl.addEventListener('input', () => {
+    pauseSim();
+    yrLabEl.textContent = Number(ttYearEl.value) + ' 年';
+  });
+  ttYearEl.addEventListener('change', () => {
+    const yr = Number(ttYearEl.value);
+    if (!yr) return;
+    const cur = simDateOf(simDays);
+    const m = cur.getUTCMonth();
+    const maxD = new Date(Date.UTC(yr, m+1, 0)).getUTCDate();
+    const day = Math.min(cur.getUTCDate(), maxD);
+    applyDate((Date.UTC(yr, m, day) - epochMs)/86400000);
+  });
+  ttTodayEl.addEventListener('click', () => applyDate(0));
+}
+
+/* ---------- 3. 行星音景（Web Audio 实时合成） ---------- */
+const listenBtnEl = $('listenBtn');
+let audioCtx = null, audioMaster = null, audioScene = null;
+function ensureAudio(){
+  if (!audioCtx){
+    const AC = window.AudioContext || window.webkitAudioContext;
+    if (!AC) return null;
+    audioCtx = new AC();
+    audioMaster = audioCtx.createGain();
+    audioMaster.gain.value = 0.5;              // 总线克制
+    audioMaster.connect(audioCtx.destination);
+  }
+  if (audioCtx.state === 'suspended') audioCtx.resume();
+  return audioCtx;
+}
+function makeNoiseSrc(ctx){
+  const len = ctx.sampleRate * 3;
+  const buf = ctx.createBuffer(1, len, ctx.sampleRate);
+  const ch = buf.getChannelData(0);
+  for (let i=0;i<len;i++) ch[i] = Math.random()*2-1;
+  const src = ctx.createBufferSource();
+  src.buffer = buf; src.loop = true;
+  return src;
+}
+function killNode(what){
+  try { if (what && what.stop) what.stop(); } catch(e){}
+  try { if (what && what.disconnect) what.disconnect(); } catch(e){}
+}
+function synthScene(key){
+  const ctx = ensureAudio();
+  if (!ctx) return null;
+  const out = ctx.createGain();
+  out.gain.value = 0.0001;
+  out.gain.linearRampToValueAtTime(1, ctx.currentTime + 1.5);
+  out.connect(audioMaster);
+  const nodes = [];
+  const hold = o => { nodes.push(o); return o; };
+  const osc = (type, f, vol, det) => {
+    const o = hold(ctx.createOscillator());
+    o.type = type || 'sine'; o.frequency.value = f; if (det) o.detune.value = det;
+    const g = hold(ctx.createGain()); g.gain.value = vol;
+    o.connect(g); g.connect(out); o.start();
+    return { o, g };
+  };
+  const lfo = (f, amt, gainTarget) => {
+    const o = hold(ctx.createOscillator()); o.type='sine'; o.frequency.value=f;
+    const g = hold(ctx.createGain()); g.gain.value = amt;
+    o.connect(g); g.connect(gainTarget.gain); o.start();
+  };
+  const nz = (type, freq, Q, vol) => {
+    const s = hold(makeNoiseSrc(ctx));
+    const f = hold(ctx.createBiquadFilter());
+    f.type = type || 'lowpass'; f.frequency.value=freq; f.Q.value = Q || 0.7;
+    const g = hold(ctx.createGain()); g.gain.value = vol;
+    s.connect(f); f.connect(g); g.connect(out); s.start();
+    return { s, g };
+  };
+  switch (key){
+    case 'sun': {       // 极低频轰鸣 + 缓慢起伏 + 噪声底
+      const a = osc('sine', 44, 0.11);
+      osc('sine', 88, 0.03);
+      osc('sawtooth', 27, 0.012);
+      lfo(0.07, 0.035, a.g);
+      nz('lowpass', 160, 0.5, 0.05);
+      break;
+    }
+    case 'mercury': {   // 干燥高频孤音
+      const a = osc('sine', 172, 0.022);
+      lfo(0.16, 0.016, a.g);
+      osc('triangle', 346, 0.006);
+      break;
+    }
+    case 'venus': {     // 温暖低沉，云感
+      const a = osc('sine', 96, 0.055);
+      osc('sine', 192, 0.013);
+      lfo(0.09, 0.02, a.g);
+      break;
+    }
+    case 'earth': {     // 风感噪声 + 低频大气嗡鸣
+      osc('sine', 58, 0.055);
+      osc('sine', 116, 0.012);
+      nz('bandpass', 720, 0.55, 0.045);
+      break;
+    }
+    case 'mars': {      // 干燥低噪 + 稀薄脉冲
+      const a = osc('sine', 132, 0.03);
+      lfo(0.42, 0.022, a.g);
+      osc('triangle', 55, 0.012);
+      nz('highpass', 900, 0.6, 0.008);
+      break;
+    }
+    case 'jupiter': {   // 低频脉冲 + 轻微谐波
+      const a = osc('sine', 41, 0.1);
+      lfo(0.9, 0.05, a.g);
+      osc('sine', 82, 0.03);
+      nz('lowpass', 110, 0.5, 0.02);
+      break;
+    }
+    case 'saturn': {    // 低沉脉冲 + 清脆高频颗粒
+      const a = osc('sine', 34, 0.09);
+      lfo(0.13, 0.03, a.g);
+      osc('sine', 68, 0.02);
+      osc('triangle', 1340, 0.0035);
+      break;
+    }
+    case 'uranus': {    // 低鸣 + 金属泛音
+      const a = osc('sine', 61, 0.05);
+      lfo(0.5, 0.02, a.g);
+      osc('triangle', 620, 0.004);
+      break;
+    }
+    case 'neptune': {   // 深蓝长音
+      const a = osc('sine', 47, 0.06);
+      lfo(0.08, 0.018, a.g);
+      osc('triangle', 235, 0.006);
+      break;
+    }
+    default: { return null; }
+  }
+  return {
+    stop(){
+      try { out.gain.cancelScheduledValues(ctx.currentTime); } catch(e){}
+      try { out.gain.setTargetAtTime(0, ctx.currentTime, 0.1); } catch(e){}
+      setTimeout(() => { nodes.forEach(killNode); }, 500);
+    }
+  };
+}
+function stopListen(){
+  if (audioScene){ audioScene.stop(); audioScene = null; }
+  listenBtnEl.textContent = '聆听当前天体';
+}
+function startListen(key){
+  const ctx = ensureAudio();
+  if (!ctx){ listenBtnEl.disabled = true; listenBtnEl.textContent = '音频不可用'; return; }
+  stopListen();
+  if (!key || key === 'overview') return;
+  const sc = synthScene(key);
+  if (!sc){ listenBtnEl.disabled = true; listenBtnEl.textContent = '音频不可用'; return; }
+  audioScene = sc;
+  listenBtnEl.textContent = '停止聆听';
+}
+function initAudioUI(){
+  const AC = window.AudioContext || window.webkitAudioContext;
+  if (!AC){ listenBtnEl.disabled = true; listenBtnEl.textContent = '音频不可用'; return; }
+  listenBtnEl.addEventListener('click', () => {
+    if (audioScene) stopListen(); else startListen(selectedKey);
+  });
+  // 导航切换天体时若正在播放，自动切到新天体音景
+  navBtns.forEach(btn => btn.addEventListener('click', () => {
+    if (audioScene) startListen(btn.dataset.key);
+  }));
+}
+
+/* ---------- 5. 随机彗星（长椭圆掠过 + 渐隐尾迹）与流星 ---------- */
+const cometNoticeEl = $('cometNotice');
+let comet = null;
+let nextCometAt = 0;
+const N_COMET = 60;
+let noticeTimer = null;
+function flashCometNotice(){
+  if (!cometNoticeEl) return;
+  cometNoticeEl.textContent = '发现彗星掠过';
+  cometNoticeEl.style.opacity = '1';
+  if (noticeTimer) clearTimeout(noticeTimer);
+  noticeTimer = setTimeout(() => { cometNoticeEl.style.opacity = '0'; }, 2600);
+}
+function spawnComet(){
+  if (comet) return;
+  const outer = 66 + Math.random()*26;      // 柯伊伯带外缘出发
+  const peri = 5.4 + Math.random()*2.6;     // 近日点掠过内太阳系
+  const th0 = Math.random()*Math.PI*2;
+  const sweep = (Math.random()<0.5?-1:1) * (1.5 + Math.random()*1.2);
+  const D = 26 + Math.random()*10;          // 全程场景秒数
+  const tiltY = (Math.random()*2-1)*0.2;
+  const positions = new Float32Array(N_COMET*3);
+  const sizes = new Float32Array(N_COMET), alphas = new Float32Array(N_COMET);
+  for (let i=0;i<N_COMET;i++){ sizes[i] = 0.75; alphas[i] = 0; }
+  const geo = new THREE.BufferGeometry();
+  const posAttr = new THREE.BufferAttribute(positions,3).setUsage(THREE.DynamicDrawUsage);
+  geo.setAttribute('position', posAttr);
+  geo.setAttribute('aSize', new THREE.BufferAttribute(sizes,1));
+  geo.setAttribute('aAlpha', new THREE.BufferAttribute(alphas,1));
+  const mat = new THREE.ShaderMaterial({
+    uniforms:{ uScale:{value:1.0}, uColor:{value:new THREE.Color(0.78, 0.92, 1.0)} },
+    transparent:true, depthWrite:false, blending:THREE.AdditiveBlending,
+    vertexShader:`
+      attribute float aSize; attribute float aAlpha;
+      varying float vA;
+      void main(){
+        vec4 mv = modelViewMatrix * vec4(position, 1.0);
+        gl_PointSize = aSize * uScale * (240.0 / max(0.1, -mv.z));
+        vA = aAlpha;
+        gl_Position = projectionMatrix * mv;
+      }`,
+    fragmentShader:`
+      uniform vec3 uColor; varying float vA;
+      void main(){
+        vec2 c = gl_PointCoord - 0.5;
+        float m = smoothstep(0.5, 0.06, length(c));
+        gl_FragColor = vec4(uColor, m * vA);
+      }`
+  });
+  const pts = new THREE.Points(geo, mat);
+  scene.add(pts);
+  comet = { pts, geo, posAttr, alphas, outer, peri, th0, sweep, D, tiltY, t: 0 };
+  flashCometNotice();
+}
+function cometRadius(q, c){
+  if (q < 0.45){
+    const u = q/0.45;
+    return c.outer + (c.peri - c.outer)*u;
+  }
+  const u = (q-0.45)/0.55;
+  return c.peri + (c.outer - c.peri)*u;
+}
+function cometAngle(q, c){
+  if (q < 0.45){
+    const u = q/0.45;
+    return c.th0 + c.sweep*0.5*u;
+  }
+  const u = (q-0.45)/0.55;
+  return c.th0 + c.sweep*(0.5 + 0.5*u);
+}
+function cometPoint(q, c, out){
+  const r = cometRadius(q, c), a = cometAngle(q, c);
+  out.set(Math.cos(a)*r, Math.sin(a*2 + c.th0*3)*c.tiltY*r*0.16, Math.sin(a)*r);
+  return out;
+}
+function removeComet(){
+  if (!comet) return;
+  scene.remove(comet.pts);
+  try { comet.pts.geometry.dispose(); comet.pts.material.dispose(); } catch(e){}
+  comet = null;
+  nextCometAt = shaderClock + 40 + Math.random()*50;   // 40–90 秒后再来
+}
+function updateComet(dt){
+  if (!comet) return;
+  const c = comet;
+  c.t += dt;
+  const q = c.t / c.D;
+  if (q > 1.08){ removeComet(); return; }
+  const head = cometPoint(q, c, new THREE.Vector3());
+  const next = cometPoint(Math.min(q+0.004, 1.0), c, new THREE.Vector3());
+  const dir = next.sub(head).normalize();
+  const tailLen = 4.2 + 2.2*Math.sin(c.th0*7 + 1.3);
+  const fade = Math.min(1, q/0.04) * Math.max(0, 1 - Math.max(0, q-0.94)/0.14);
+  for (let i=0;i<N_COMET;i++){
+    const k = i/(N_COMET-1);
+    const p = head.clone().addScaledVector(dir, -k*tailLen);
+    c.posAttr.array[i*3]   = p.x;
+    c.posAttr.array[i*3+1] = p.y;
+    c.posAttr.array[i*3+2] = p.z;
+    c.geo.attributes.aSize.array[i] = 0.8 - k*0.62;
+    c.geo.attributes.aAlpha.array[i] = fade * Math.pow(1-k, 1.5);
+  }
+  c.posAttr.needsUpdate = true;
+  c.geo.attributes.aSize.needsUpdate = true;
+  c.geo.attributes.aAlpha.needsUpdate = true;
+}
+function trySpawnComet(){
+  if (!comet && shaderClock >= nextCometAt) spawnComet();
+}
+
+/* 流星：细短线快速划过 */
+let meteors = [];
+let nextMeteorAt = 3 + Math.random()*3;
+function spawnMeteor(){
+  if (meteors.length >= 3) return;
+  const dir = new THREE.Vector3().randomDirection().multiplyScalar(Math.random()<0.5?1:-1);
+  const dist0 = 16 + Math.random()*70;
+  const start = dir.clone().multiplyScalar(dist0);
+  const geo = new THREE.BufferGeometry();
+  const posAttr = new THREE.BufferAttribute(new Float32Array(6), 3).setUsage(THREE.DynamicDrawUsage);
+  geo.setAttribute('position', posAttr);
+  const mat = new THREE.LineBasicMaterial({
+    color:0xdde8ff, transparent:true, opacity:0.0, depthWrite:false
+  });
+  const line = new THREE.Line(geo, mat);
+  scene.add(line);
+  meteors.push({
+    line, geo, posAttr, dir, start,
+    spd: 40 + Math.random()*50, len: 0.7 + Math.random()*1.2,
+    life: 0.3 + Math.random()*0.35, t: 0
+  });
+}
+function updateMeteors(dt){
+  for (let i=meteors.length-1;i>=0;i--){
+    const m = meteors[i];
+    m.t += dt;
+    const a = Math.max(0, 1 - m.t/m.life);
+    if (a <= 0){
+      scene.remove(m.line);
+      try { m.geo.dispose(); m.line.material.dispose(); } catch(e){}
+      meteors.splice(i,1);
+      continue;
+    }
+    const head = m.start.clone().addScaledVector(m.dir, m.spd*m.t);
+    const tail = head.clone().addScaledVector(m.dir, -m.len);
+    m.posAttr.setXYZ(0, head.x, head.y, head.z);
+    m.posAttr.setXYZ(1, tail.x, tail.y, tail.z);
+    m.posAttr.needsUpdate = true;
+    m.line.material.opacity = Math.sin(Math.PI * (1-a)) * 0.7;
+  }
+}
+function trySpawnMeteor(){
+  if (shaderClock >= nextMeteorAt){
+    spawnMeteor();
+    nextMeteorAt = shaderClock + 3.5 + Math.random()*4.5;
+  }
+}
+
+/* ---------- 初始化全部新功能 ---------- */
+function featuresInit(){
+  buildBeltAssets();
+  attachNightShell();
+  initTimeTravel();
+  initAudioUI();
+  nextCometAt = shaderClock + 30 + Math.random()*30;   // 首个彗星约 30–60s
+  nextMeteorAt = shaderClock + 3 + Math.random()*3;
+}
+featuresInit();
 
 /* ================= 自适应 ================= */
 function resize(){
