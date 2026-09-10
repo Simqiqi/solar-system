@@ -269,7 +269,8 @@
   }
   #layerWord span{
     font-size:clamp(48px,13.5vw,238px);font-weight:600;letter-spacing:.13em;
-    line-height:1;color:rgba(255,255,255,.13);white-space:nowrap;
+    line-height:1;color:rgba(255,255,255,.28);white-space:nowrap;
+    text-shadow:0 0 90px rgba(184,255,0,.05);
     margin-right:-.13em;transform:scale(1.04);
     transition:transform 2.8s cubic-bezier(.2,.7,.2,1);
   }
@@ -2303,7 +2304,7 @@ function flashLayerWord(text){
   span.style.transition = '';
   span.style.transform = '';
   layer.classList.add('on');
-  wordHideTimer = setTimeout(() => layer.classList.remove('on'), 2000);
+  wordHideTimer = setTimeout(() => layer.classList.remove('on'), 3200);
 }
 
 /* ---------- 两侧导航 / 面板的进出节奏（不生硬闪烁） ---------- */
