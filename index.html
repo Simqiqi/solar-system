@@ -168,9 +168,147 @@
     font-weight:500;
   }
   .scale-btn:first-of-type{margin-top:2px}
+  /* =================================================================
+     星图封面（第一屏） / 层级大字浮现 / 进出节奏 —— 新增
+     ================================================================= */
+  #app{transition:opacity 1.05s ease,transform 1.3s cubic-bezier(.25,.72,.2,1)}
+  #app.enter{opacity:0;transform:scale(1.035)}
+  #side,#panel{position:relative;z-index:2;transition:opacity .44s ease,transform .44s ease}
+  #app.shifting #side{opacity:.3;transform:translateX(-9px)}
+  #app.shifting #panel{opacity:.3;transform:translateX(9px)}
+
+  #cover{
+    position:fixed;inset:0;z-index:60;background:#0a0e2a;overflow:hidden;
+    transition:opacity .95s ease;
+  }
+  #cover.off{opacity:0;pointer-events:none}
+  #coverCanvas{
+    position:absolute;inset:0;width:100%;height:100%;display:block;
+    transition:opacity .85s ease;
+  }
+  #cover.off #coverCanvas{opacity:0}
+
+  /* 下缘紫灰星球弧线 */
+  .cover-globe{
+    position:absolute;left:50%;bottom:-42vh;width:178vw;height:66vh;
+    transform:translateX(-50%);border-radius:50%;pointer-events:none;
+    background:radial-gradient(112% 100% at 50% 0%,#3d3d78 0%,#2b2b56 24%,#191a38 56%,#0c1026 100%);
+    box-shadow:inset 0 46px 96px -34px rgba(152,162,255,.18);
+    transition:opacity .95s ease,transform 1.25s cubic-bezier(.3,.72,.2,1);
+  }
+  .cover-globe::before{
+    content:"";position:absolute;left:6%;right:6%;top:0;height:1px;
+    background:linear-gradient(90deg,rgba(160,170,255,0) 0%,rgba(178,186,255,.5) 50%,rgba(160,170,255,0) 100%);
+  }
+  #cover.off .cover-globe{opacity:0;transform:translateX(-50%) translateY(7%)}
+
+  /* 中央超大号半透明白色大字 */
+  .cover-word{
+    position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);
+    font-size:clamp(60px,18vw,320px);font-weight:600;letter-spacing:.13em;
+    line-height:1;color:rgba(255,255,255,.14);white-space:nowrap;
+    margin-right:-.13em;user-select:none;pointer-events:none;
+    transition:opacity .8s ease,transform 1.15s cubic-bezier(.22,.72,.2,1);
+  }
+  #cover.off .cover-word{opacity:0;transform:translate(-50%,-45%) scale(1.05)}
+
+  .cover-logo{
+    position:absolute;left:44px;top:38px;color:#b8ff00;
+    font-size:11px;letter-spacing:.34em;font-weight:500;
+    transition:opacity .55s ease;
+  }
+  .cover-logo small{
+    display:block;margin-top:9px;color:#8a9bc4;
+    font-size:10px;letter-spacing:.2em;font-weight:400;
+  }
+  .cover-enter{
+    position:absolute;right:44px;top:37px;background:none;border:0;
+    border-bottom:1px solid rgba(232,237,247,.42);color:#e8edf7;
+    font:inherit;font-size:11px;letter-spacing:.34em;padding:5px 1px;
+    cursor:pointer;
+    transition:color .3s ease,border-color .3s ease,opacity .55s ease;
+  }
+  .cover-enter:hover{color:#b8ff00;border-color:#b8ff00}
+
+  .cover-nav{
+    position:absolute;left:44px;bottom:44px;display:flex;flex-direction:column;
+    gap:9px;align-items:flex-start;transition:opacity .55s ease;
+  }
+  .cover-nav em{
+    font-style:normal;color:#4d5a80;font-size:9.5px;
+    letter-spacing:.3em;margin-bottom:2px;
+  }
+  .cover-nav button{
+    background:none;border:0;padding:0;cursor:pointer;text-align:left;
+    color:#8a9bc4;font:inherit;font-size:10px;letter-spacing:.28em;
+    transition:color .3s ease;
+  }
+  .cover-nav button:hover{color:#e8edf7}
+
+  .cover-quote{
+    position:absolute;left:50%;bottom:46px;transform:translateX(-50%);
+    width:min(640px,70vw);text-align:center;transition:opacity .55s ease;
+  }
+  .cover-quote p{color:#d5dcec;font-size:13px;letter-spacing:.05em;line-height:1.7}
+  .cover-quote cite{
+    display:block;margin-top:10px;font-style:normal;
+    color:#63709a;font-size:9.5px;letter-spacing:.3em;
+  }
+  .cover-meta{
+    position:absolute;right:44px;bottom:46px;color:#4d5a80;
+    font-size:9.5px;letter-spacing:.28em;transition:opacity .55s ease;
+  }
+  #cover.off .cover-logo,#cover.off .cover-enter,#cover.off .cover-nav,
+  #cover.off .cover-quote,#cover.off .cover-meta{opacity:0}
+
+  /* 切换层级时中央浮现的超大号半透明英文名 */
+  #layerWord{
+    position:fixed;inset:0;z-index:1;display:flex;align-items:center;
+    justify-content:center;opacity:0;pointer-events:none;
+    transition:opacity .62s ease;
+  }
+  #layerWord span{
+    font-size:clamp(48px,13.5vw,238px);font-weight:600;letter-spacing:.13em;
+    line-height:1;color:rgba(255,255,255,.13);white-space:nowrap;
+    margin-right:-.13em;transform:scale(1.04);
+    transition:transform 2.8s cubic-bezier(.2,.7,.2,1);
+  }
+  #layerWord.on{opacity:1}
+  #layerWord.on span{transform:scale(1)}
+
+  @media (max-width:900px){
+    .cover-nav,.cover-meta{display:none}
+    .cover-logo{left:24px;top:26px}
+    .cover-enter{right:24px;top:26px}
+    .cover-quote{bottom:34px;width:78vw}
+    .cover-word{font-size:23vw;letter-spacing:.08em}
+    .cover-globe{bottom:-34vh;height:54vh;width:212vw}
+  }
 </style>
 </head>
 <body>
+
+<!-- ============ 星图封面 · 第一屏（新增） ============ -->
+<div id="cover">
+  <canvas id="coverCanvas"></canvas>
+  <div class="cover-globe"></div>
+  <div class="cover-word">EARTH</div>
+  <div class="cover-logo">SOLAR SYSTEM<small>极简 · 实时 · 科普</small></div>
+  <button class="cover-enter" id="coverEnter">ENTER</button>
+  <div class="cover-nav" id="coverNav">
+    <em>SCALE</em>
+    <button data-scale="solar">SOLAR SYSTEM</button>
+    <button data-scale="stars">NEARBY STARS</button>
+    <button data-scale="galaxy">THE MILKY WAY</button>
+    <button data-scale="cosmos">OBSERVABLE UNIVERSE</button>
+  </div>
+  <div class="cover-quote">
+    <p id="coverQuote">We are made of star stuff.</p>
+    <cite id="coverQuoteSrc">CARL SAGAN</cite>
+  </div>
+  <div class="cover-meta">DRAG · SCROLL · CLICK</div>
+</div>
+
 <div id="app">
   <aside id="side">
     <div class="brand">SOLAR SYSTEM</div>
@@ -234,6 +372,9 @@
     <button class="ghost-btn" id="listenBtn">聆听当前天体</button>
   </aside>
 </div>
+
+<!-- 切换层级时中央浮现的大字层（新增） -->
+<div id="layerWord"><span id="layerWordText"></span></div>
 
 <script type="importmap">
 { "imports": {
@@ -946,7 +1087,7 @@ function animate(){
   }
 
   controls.update();
-  renderer.render(scene, camera);
+  if (!COVER.visible) renderer.render(scene, camera);   // 封面遮挡时暂停 3D 渲染
 }
 
 /* =====================================================================
@@ -1945,6 +2086,285 @@ navBtns.forEach(btn => btn.addEventListener('click', () => {
   setScaleActive(null);
 }));
 setScaleActive(null);
+
+/* =====================================================================
+   星图封面（第一屏） · 层级大字浮现 · 进出节奏（新增）
+   ===================================================================== */
+
+/* 层级 / 天体英文大字，与封面大字风格统一 */
+const LAYER_WORD = {
+  overview:'SOLAR SYSTEM', sun:'THE SUN', mercury:'MERCURY', venus:'VENUS',
+  earth:'EARTH', mars:'MARS', jupiter:'JUPITER', saturn:'SATURN',
+  uranus:'URANUS', neptune:'NEPTUNE',
+  solar:'EARTH', stars:'NEARBY STARS', galaxy:'THE MILKY WAY', cosmos:'OBSERVABLE UNIVERSE'
+};
+
+/* 天文意象短句库（12 句，每次进入封面随机抽取一句） */
+const COVER_QUOTES = [
+  { text:'We are made of star stuff.', by:'CARL SAGAN' },
+  { text:'Somewhere, something incredible is waiting to be known.', by:'CARL SAGAN' },
+  { text:'The cosmos is within us.', by:'CARL SAGAN' },
+  { text:'We are a way for the cosmos to know itself.', by:'CARL SAGAN' },
+  { text:'The universe is under no obligation to make sense to you.', by:'NEIL DEGRASSE TYSON' },
+  { text:'Look up, and wonder.', by:'STEPHEN HAWKING' },
+  { text:'Across the sea of space, the stars are other suns.', by:'CHRISTIAAN HUYGENS' },
+  { text:'The nitrogen in our DNA, the calcium in our teeth, the iron in our blood — all were made in the interiors of collapsing stars.', by:'CARL SAGAN' },
+  { text:'For small creatures such as we, the vastness is bearable only through love.', by:'CARL SAGAN' },
+  { text:'We are stardust brought to life, then empowered by the universe to figure itself out.', by:'NEIL DEGRASSE TYSON' },
+  { text:'Astronomy compels the soul to look upward.', by:'PLATO' },
+  { text:'The Earth is the cradle of humanity, but mankind cannot stay in the cradle forever.', by:'KONSTANTIN TSIOLKOVSKY' }
+];
+
+const appEl   = document.getElementById('app');
+const coverEl = document.getElementById('cover');
+const coverCv = document.getElementById('coverCanvas');
+const coverCx = coverCv ? coverCv.getContext('2d') : null;
+const COVER = {
+  visible:false, raf:0, w:0, h:0, dpr:1, cx:0, cy:0, R:0,
+  pts:[], links:[], bg:[], lastQ:-1
+};
+
+/* ---------- 封面画布：星点 + 星座节点网络（呼吸感） ---------- */
+function coverLayout(){
+  const w = COVER.w, h = COVER.h;
+  const R = Math.min(w, h) * 0.40;
+  COVER.cx = w * 0.5; COVER.cy = h * 0.47; COVER.R = R;
+
+  const N = Math.round(Math.min(96, Math.max(56, w * 0.055)));
+  const pts = [];
+  for (let i = 0; i < N; i++){
+    const a = Math.random() * Math.PI * 2;
+    const r = R * Math.pow(Math.random(), 0.6) * (0.84 + Math.random() * 0.26);
+    pts.push({
+      x: Math.cos(a) * r * 0.96, y: Math.sin(a) * r * 0.74,
+      r0: 0.6 + Math.random() * 1.4, phase: Math.random() * 6.2832,
+      big: Math.random() < 0.15, white: Math.random() < 0.28
+    });
+  }
+  const d0 = R * 0.34, deg = new Array(N).fill(0), cand = [];
+  for (let i = 0; i < N; i++){
+    for (let j = i + 1; j < N; j++){
+      const dx = pts[i].x - pts[j].x, dy = pts[i].y - pts[j].y;
+      const d = Math.sqrt(dx * dx + dy * dy);
+      if (d < d0) cand.push([d, i, j]);
+    }
+  }
+  cand.sort((p, q) => p[0] - q[0]);
+  const links = [];
+  for (let k = 0; k < cand.length; k++){
+    const d = cand[k][0], i = cand[k][1], j = cand[k][2];
+    if (deg[i] >= 4 || deg[j] >= 4) continue;
+    deg[i]++; deg[j]++;
+    links.push([i, j, 1 - d / d0]);
+  }
+  COVER.pts = pts; COVER.links = links;
+
+  const nb = Math.round(Math.min(230, Math.max(90, w * 0.12)));
+  const bg = [];
+  for (let i = 0; i < nb; i++){
+    bg.push({ x: Math.random() * w, y: Math.random() * h, r: 0.3 + Math.random() * 1.0,
+              a: 0.16 + Math.random() * 0.5, ph: Math.random() * 6.2832,
+              sp: 0.2 + Math.random() * 0.85 });
+  }
+  COVER.bg = bg;
+}
+function coverResize(){
+  if (!coverCv || !coverCx) return;
+  const dpr = Math.min(window.devicePixelRatio || 1, 2);
+  const w = window.innerWidth, h = window.innerHeight;
+  coverCv.width = Math.round(w * dpr);
+  coverCv.height = Math.round(h * dpr);
+  COVER.w = w; COVER.h = h; COVER.dpr = dpr;
+  coverCx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  coverLayout();
+}
+function coverFrame(now){
+  if (!COVER.visible || !coverCx){ COVER.raf = 0; return; }
+  COVER.raf = requestAnimationFrame(coverFrame);
+  const t = now * 0.001;
+  const breath = 0.5 + 0.5 * Math.sin(t * 0.42);
+  coverCx.clearRect(0, 0, COVER.w, COVER.h);
+
+  /* 背景星点：轻微闪烁 */
+  for (let i = 0; i < COVER.bg.length; i++){
+    const s = COVER.bg[i];
+    coverCx.globalAlpha = Math.max(0.05, s.a * (0.55 + 0.45 * Math.sin(t * s.sp + s.ph)));
+    coverCx.fillStyle = '#e9eeff';
+    coverCx.beginPath(); coverCx.arc(s.x, s.y, s.r, 0, 6.2832); coverCx.fill();
+  }
+
+  /* 星座网络：整体极缓慢旋转 + 呼吸 */
+  const rot = t * 0.012, cs = Math.cos(rot), sn = Math.sin(rot);
+  const px = [], py = [];
+  for (let i = 0; i < COVER.pts.length; i++){
+    const p = COVER.pts[i];
+    px.push(COVER.cx + p.x * cs - p.y * sn);
+    py.push(COVER.cy + p.x * sn + p.y * cs);
+  }
+  coverCx.lineWidth = 0.75;
+  for (let k = 0; k < COVER.links.length; k++){
+    const i = COVER.links[k][0], j = COVER.links[k][1], wgt = COVER.links[k][2];
+    const a = (0.09 + 0.30 * breath) * (0.32 + 0.68 * wgt) * (0.62 + 0.38 * Math.sin(t * 0.5 + i * 1.7));
+    coverCx.globalAlpha = Math.max(0.02, a);
+    coverCx.strokeStyle = (COVER.pts[i].white && COVER.pts[j].white) ? '#eaf2ff' : '#b8ff00';
+    coverCx.beginPath(); coverCx.moveTo(px[i], py[i]); coverCx.lineTo(px[j], py[j]); coverCx.stroke();
+  }
+  for (let i = 0; i < px.length; i++){
+    const p = COVER.pts[i];
+    const pr = (p.big ? 1.9 : 1.0) + p.r0 * 0.5 * (1 + 0.6 * Math.sin(t * 0.9 + p.phase)) * (0.5 + 0.5 * breath);
+    if (p.big){
+      coverCx.globalAlpha = 0.10 + 0.16 * breath;
+      coverCx.fillStyle = p.white ? '#ffffff' : '#b8ff00';
+      coverCx.beginPath(); coverCx.arc(px[i], py[i], pr * 3.6, 0, 6.2832); coverCx.fill();
+    }
+    coverCx.globalAlpha = Math.min(1, 0.34 + 0.52 * breath);
+    coverCx.fillStyle = p.white ? '#ffffff' : '#b8ff00';
+    coverCx.beginPath(); coverCx.arc(px[i], py[i], pr, 0, 6.2832); coverCx.fill();
+  }
+  coverCx.globalAlpha = 1;
+}
+function coverStartLoop(){
+  if (!COVER.visible || COVER.raf) return;
+  COVER.raf = requestAnimationFrame(coverFrame);
+}
+
+/* ---------- 随机英文短句 ---------- */
+function coverRandomQuote(){
+  let idx = Math.floor(Math.random() * COVER_QUOTES.length);
+  if (COVER_QUOTES.length > 1 && idx === COVER.lastQ) idx = (idx + 1) % COVER_QUOTES.length;
+  COVER.lastQ = idx;
+  const q = COVER_QUOTES[idx];
+  const p = document.getElementById('coverQuote');
+  const c = document.getElementById('coverQuoteSrc');
+  if (p) p.textContent = q.text;
+  if (c) c.textContent = q.by;
+}
+
+/* ---------- 封面 -> 主站：淡出 + 相机轻推入 ---------- */
+function camPushIn(dur){
+  scaleTrans = {
+    t: 0, dur: dur || 1.9,
+    startPos: new THREE.Vector3(0, 62, 176),
+    startTgt: new THREE.Vector3(0, 0, 0),
+    endPos: new THREE.Vector3(0, 34, 90),
+    endTgt: new THREE.Vector3(0, 0, 0)
+  };
+}
+let coverVisited = false;
+try { coverVisited = sessionStorage.getItem('solarCoverSeen') === '1'; } catch (e){ coverVisited = false; }
+
+function enterSite(scaleKey){
+  if (!COVER.visible){
+    if (scaleKey) selectScale(scaleKey);
+    return;
+  }
+  COVER.visible = false;
+  coverEl.classList.add('off');
+  appEl.classList.remove('enter');
+  scaleTrans = null;
+  camPushIn(2.0);
+  try { sessionStorage.setItem('solarCoverSeen', '1'); } catch (e){}
+  setTimeout(() => { coverEl.style.display = 'none'; }, 1150);
+  if (scaleKey){
+    setTimeout(() => { selectScale(scaleKey); flashLayerWord(LAYER_WORD[scaleKey]); }, 160);
+  } else {
+    /* 进入太阳系层：与封面大字呼应，浮现 EARTH */
+    setTimeout(() => flashLayerWord(LAYER_WORD.solar), 760);
+  }
+}
+/* 重新唤回封面（ESC / 点击左侧站点名） */
+function showCover(){
+  if (COVER.visible) return;
+  coverEl.style.display = 'block';
+  COVER.visible = true;
+  coverResize();
+  coverRandomQuote();
+  appEl.classList.add('enter');
+  scaleTrans = null;
+  followTrans = null;
+  requestAnimationFrame(() => {
+    coverEl.classList.remove('off');
+    coverStartLoop();
+  });
+}
+
+/* ---------- 层级大字：浮现 0.6s，停留 2s 后淡出 ---------- */
+let wordHideTimer = 0;
+function flashLayerWord(text){
+  const layer = document.getElementById('layerWord');
+  const span  = document.getElementById('layerWordText');
+  if (!layer || !span || !text) return;
+  clearTimeout(wordHideTimer);
+  layer.classList.remove('on');
+  span.textContent = text;
+  span.style.transition = 'none';
+  span.style.transform = 'scale(1.045)';
+  void span.offsetWidth;
+  span.style.transition = '';
+  span.style.transform = '';
+  layer.classList.add('on');
+  wordHideTimer = setTimeout(() => layer.classList.remove('on'), 2000);
+}
+
+/* ---------- 两侧导航 / 面板的进出节奏（不生硬闪烁） ---------- */
+let shiftTimer = 0;
+function sideShift(){
+  appEl.classList.add('shifting');
+  clearTimeout(shiftTimer);
+  shiftTimer = setTimeout(() => appEl.classList.remove('shifting'), 540);
+}
+
+/* 事件绑定（在既有导航监听之后追加，不改变原有逻辑） */
+const coverEnterBtn = document.getElementById('coverEnter');
+if (coverEnterBtn) coverEnterBtn.addEventListener('click', () => enterSite(null));
+if (coverEl){
+  coverEl.addEventListener('click', (e) => {
+    if (e.target === coverEl || e.target === coverCv) enterSite(null);
+  });
+}
+Array.from(document.querySelectorAll('#coverNav button')).forEach(btn => {
+  btn.addEventListener('click', () => enterSite(btn.dataset.scale));
+});
+window.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape' && !COVER.visible) showCover();
+  else if (e.key === 'Enter' && COVER.visible) enterSite(null);
+});
+const brandEl = document.querySelector('#side .brand');
+if (brandEl){
+  brandEl.style.cursor = 'pointer';
+  brandEl.title = '唤回星图封面（ESC）';
+  brandEl.addEventListener('click', showCover);
+}
+navBtns.forEach(btn => btn.addEventListener('click', () => {
+  sideShift();
+  flashLayerWord(LAYER_WORD[btn.dataset.key]);
+}));
+scaleBtns.forEach(btn => btn.addEventListener('click', () => {
+  sideShift();
+  flashLayerWord(LAYER_WORD[btn.dataset.scale]);
+}));
+window.addEventListener('resize', () => { if (COVER.visible) coverResize(); });
+
+/* 封面仅在本次会话首次出现 */
+try {
+  coverResize();
+  if (coverVisited){
+    COVER.visible = false;
+    coverEl.classList.add('off');
+    coverEl.style.display = 'none';
+    appEl.classList.remove('enter');
+    camPushIn(1.7);
+  } else {
+    appEl.classList.add('enter');
+    COVER.visible = true;
+    coverRandomQuote();
+    coverStartLoop();
+  }
+} catch (e){
+  COVER.visible = false;
+  if (coverEl) coverEl.style.display = 'none';
+  appEl.classList.remove('enter');
+}
 
 /* ================= 自适应 ================= */
 function resize(){
