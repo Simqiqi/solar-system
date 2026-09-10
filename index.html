@@ -148,6 +148,26 @@
     color:var(--gold);font-size:11px;letter-spacing:.2em;
     opacity:0;transition:opacity .5s ease;pointer-events:none;
   }
+  /* ---------- 新增：宇宙尺度逐级拉远导航 ---------- */
+  .side-group{
+    margin:20px 0 6px;padding:12px 0 0 16px;
+    font-size:10px;letter-spacing:.2em;color:#5c6880;
+    border-top:1px solid var(--line);
+  }
+  .scale-btn{
+    display:block;width:100%;text-align:left;
+    padding:7px 12px 7px 16px;
+    font:12px/1.6 inherit;letter-spacing:.14em;color:#67738a;
+    background:none;border:none;border-left:2px solid transparent;
+    cursor:pointer;user-select:none;transition:color .18s ease,opacity .18s ease;
+    white-space:nowrap;
+  }
+  .scale-btn:hover{color:#dde5f2}
+  .scale-btn.active{
+    color:var(--gold);border-left-color:var(--gold);
+    font-weight:500;
+  }
+  .scale-btn:first-of-type{margin-top:2px}
 </style>
 </head>
 <body>
@@ -165,6 +185,11 @@
     <button class="nav-btn" data-key="saturn">土星</button>
     <button class="nav-btn" data-key="uranus">天王星</button>
     <button class="nav-btn" data-key="neptune">海王星</button>
+    <div class="side-group">宇宙尺度 · 逐级拉远</div>
+    <button class="scale-btn" data-scale="solar">太阳系</button>
+    <button class="scale-btn" data-scale="stars">邻近恒星</button>
+    <button class="scale-btn" data-scale="galaxy">银河系</button>
+    <button class="scale-btn" data-scale="cosmos">星系群 · 可观测宇宙</button>
     <div class="side-note">以太阳为中心公转，<br>轨道半径已适度压缩以利阅读。</div>
   </aside>
   <main id="stage">
@@ -174,6 +199,7 @@
   <aside id="panel">
     <div class="sel-title" id="selName">太阳系总览</div>
     <div class="sel-en" id="selEn">OVERVIEW</div>
+    <div class="kv" id="kvScale" style="display:none"><span class="k">尺度跨度</span><span class="v" id="fScale">—</span></div>
     <div class="kv"><span class="k">模拟日期</span><span class="v mono" id="fDate">—</span></div>
     <div class="kv"><span class="k">模拟推进</span><span class="v mono" id="fDays">—</span></div>
     <div class="kv"><span class="k">距太阳</span><span class="v" id="fDist">—</span></div>
@@ -765,6 +791,13 @@ function refreshPanel(){
   const b = BODY[selectedKey];
   $('selName').textContent = b.name;
   $('selEn').textContent = b.en;
+  /* 宇宙尺度层级：显示真实尺度跨度（新增） */
+  const scInfo = (typeof SCALE_INFO !== 'undefined') ? SCALE_INFO[selectedKey] : null;
+  const kvScaleEl = $('kvScale');
+  if (kvScaleEl){
+    kvScaleEl.style.display = scInfo ? 'flex' : 'none';
+    if (scInfo) $('fScale').textContent = scInfo.scale;
+  }
   $('fDist').textContent = b.dist || '—';
   if (b.periodDays){
     const pd = b.periodDays;
@@ -869,7 +902,14 @@ function animate(){
   if (bodies.saturn.ringMesh) bodies.saturn.ringMesh.rotation.y += dt * 0.02;
 
   /* 相机转场 / 跟随 */
-  if (followTrans){
+  if (scaleTrans){
+    /* 宇宙尺度逐级拉远：层级间相机转场（新增） */
+    scaleTrans.t += dt / scaleTrans.dur;
+    const ss = EASE(Math.min(scaleTrans.t, 1));
+    camera.position.lerpVectors(scaleTrans.startPos, scaleTrans.endPos, ss);
+    controls.target.lerpVectors(scaleTrans.startTgt, scaleTrans.endTgt, ss);
+    if (scaleTrans.t >= 1) scaleTrans = null;
+  } else if (followTrans){
     followTrans.t += dt / followTrans.dur;
     const s = EASE(Math.min(followTrans.t, 1));
     // 目标随天体移动，末端实时刷新，保证跟随平滑
@@ -921,6 +961,17 @@ FEATURE.load = function(url, srgb){
   return t;
 };
 function featureTick(dt){
+  /* 宇宙尺度层级下：清理并暂停太阳系瞬态天体（彗星 / 流星）（新增） */
+  if (scaleLevel !== 0){
+    if (comet) removeComet();
+    for (let i = meteors.length - 1; i >= 0; i--){
+      const m = meteors[i];
+      scene.remove(m.line);
+      try { m.geo.dispose(); m.line.material.dispose(); } catch(e){}
+      meteors.splice(i, 1);
+    }
+    return;
+  }
   if (beltAst) updateBelt(beltAst, dt);
   if (beltKui) updateBelt(beltKui, dt);
   updateMeteors(dt);
@@ -1403,6 +1454,497 @@ function featuresInit(){
   nextMeteorAt = shaderClock + 3 + Math.random()*3;
 }
 featuresInit();
+
+/* =====================================================================
+   新增功能：宇宙尺度 · 逐级拉远
+   太阳系 → 邻近恒星（比邻星 / 天狼星等，按真实光年距离）→
+   银河系（四条对数螺旋臂 + 标出太阳所在位置）→ 本星系群 / 可观测宇宙
+   视觉全部由程序化 Canvas 贴图 + Points / Line 生成，不引用任何外部图片，
+   保持单 HTML 文件、深空暗色（#05070d）与克制的中文科普文案。
+   ===================================================================== */
+
+/* ---------- 层级科普数据（真实距离数字） ---------- */
+const SCALE_INFO = {
+  solar:  { scale: '约 0.4 – 30.1 au（直径约 90 亿 km）' },
+  stars:  { scale: '4.24 – 12.36 光年（约 4.0 × 10^13 km）' },
+  galaxy: { scale: '直径约 10 万光年 · 太阳距银心约 2.6 万光年' },
+  cosmos: { scale: '本星系群约 1,000 万光年 · 可观测宇宙约 930 亿光年' }
+};
+const SCALE_KEYS = ['solar', 'stars', 'galaxy', 'cosmos'];
+const SCALE_LEVEL = { solar: 0, stars: 1, galaxy: 2, cosmos: 3 };
+
+BODY.solar = {
+  name: '太阳系', en: 'SOLAR SYSTEM',
+  dist: '日心参考 · 8 大行星', period: '—', vel: '—', rot: '—',
+  dia: '直径约 90 亿 km（约 60 au）', temp: '—', moons: '8 行星 · 5 矮行星 · 数百颗卫星',
+  desc: '太阳系的边界通常以日球层顶或柯伊伯带外缘计，约 0.4 au（近日点水星轨道）到 30.1 au（海王星轨道）。若以奥尔特云外缘估算，可延伸至约 10 万 au（约 1.6 光年）。这是「逐级拉远」的第一级。'
+};
+BODY.stars = {
+  name: '邻近恒星', en: 'NEARBY STARS',
+  dist: '太阳 → 比邻星 4.24 光年', period: '光行时间 4.24 年', vel: '天狼星自转约 18 km/s',
+  rot: '—', dia: '恒星间距量级约 1 – 10 光年', temp: '红矮星约 2,800 – 3,800 K',
+  moons: '15 光年内已知约 50 个恒星系',
+  desc: '拉远到太阳系之外，最近的恒星是半人马座 α 三星系统中的比邻星，距离 4.24 光年；夜空中最亮的天狼星距我们 8.60 光年。本层按真实光年距离等比排布（1 光年 = 6 场景单位），并标出 5 光年与 10 光年的参考半径。'
+};
+BODY.galaxy = {
+  name: '银河系', en: 'THE MILKY WAY',
+  dist: '太阳距银心约 2.6 万光年', period: '太阳绕银心约 2.25 – 2.5 亿年', vel: '太阳约 220 km/s',
+  rot: '较差自转（内快外慢）', dia: '直径约 10 万光年 · 银盘厚约 1,000 光年',
+  temp: '恒星总数约 1,000 – 4,000 亿颗', moons: '四条主旋臂 · 银心存在超大质量黑洞',
+  desc: '银河系是直径约 10 万光年的棒旋星系，拥有四条主旋臂与约 1,000 – 4,000 亿颗恒星。太阳位于外层猎户臂（或称本地臂）内侧，距银心约 2.6 万光年，绕银心运行一周约 2.3 亿年。金色标记即为太阳所在位置。'
+};
+BODY.cosmos = {
+  name: '本星系群 · 可观测宇宙', en: 'LOCAL GROUP · OBSERVABLE UNIVERSE',
+  dist: '银河系 → 仙女座约 254 万光年', period: '本星系群直径约 1,000 万光年',
+  vel: '哈勃常数约 70 km/s/Mpc', rot: '宇宙整体膨胀',
+  dia: '可观测宇宙直径约 930 亿光年', temp: '宇宙年龄约 138 亿年',
+  moons: '本星系群成员星系 80 个以上',
+  desc: '继续拉远：银河系与仙女座星系（约 254 万光年）、三角座星系等共同构成本星系群，直径约 1,000 万光年；再往外是室女座星系团（约 5,400 万光年）与更遥远的星系，直至半径约 465 亿光年的可观测宇宙边界。本层为示意排布，仅距离数字为真实值。'
+};
+
+/* ---------- 状态与太阳系对象收集 ---------- */
+let scaleLevel = 0;          // 0 = 太阳系，1 = 邻近恒星，2 = 银河系，3 = 本星系群/可观测宇宙
+let scaleTrans = null;       // 层级相机转场 {t,dur,startPos,startTgt,endPos,endTgt}
+const scaleCache = {};       // key -> THREE.Group（首次进入时构建）
+const SS_OBJS = [];          // 太阳系原有可见对象（非太阳系层级时隐藏）
+
+(function collectSolarSystemObjects(){
+  const push = o => { if (o && SS_OBJS.indexOf(o) < 0) SS_OBJS.push(o); };
+  if (bodies.sun && bodies.sun.root) push(bodies.sun.root);
+  ORDER.forEach(k => { if (bodies[k] && bodies[k].root) push(bodies[k].root); });
+  scene.children.forEach(o => {
+    if (!o || o === stars || o === bodies.sun.root) return;
+    if (o.isLine) push(o);                                                        // 行星轨道线
+    else if (o.isPoints && o.geometry && o.geometry.getAttribute('color')) push(o); // 小行星带 / 柯伊伯带
+  });
+})();
+
+function setSolarVisible(v){ SS_OBJS.forEach(o => { o.visible = v; }); }
+
+const scaleBtns = Array.from(document.querySelectorAll('.scale-btn'));
+function setScaleActive(key){
+  scaleBtns.forEach(b => b.classList.toggle('active', b.dataset.scale === key));
+}
+function hideAllScaleLevels(){
+  SCALE_KEYS.forEach(k => { if (scaleCache[k]) scaleCache[k].visible = false; });
+}
+
+/* ---------- 程序化贴图小工具（无任何外部图片） ---------- */
+function scLabel(text, opt){
+  const o = opt || {};
+  const fs = o.px || 40;
+  const pad = 14;
+  const font = `${o.weight || 400} ${fs}px "PingFang SC","Hiragino Sans GB","Helvetica Neue",Arial,sans-serif`;
+  const cv = document.createElement('canvas');
+  const probe = cv.getContext('2d');
+  probe.font = font;
+  const w = Math.ceil(probe.measureText(text).width) + pad * 2;
+  const h = fs + pad * 2;
+  cv.width = Math.max(8, w);
+  cv.height = Math.max(8, h);
+  const ctx = cv.getContext('2d');
+  ctx.font = font;
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillStyle = o.color || '#dfe7f5';
+  ctx.fillText(text, cv.width / 2, cv.height / 2);
+  const tex = new THREE.CanvasTexture(cv);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  tex.minFilter = THREE.LinearFilter;
+  const mat = new THREE.SpriteMaterial({
+    map: tex, transparent: true, depthWrite: false, depthTest: false,
+    opacity: (o.opacity === undefined ? 0.94 : o.opacity)
+  });
+  const sp = new THREE.Sprite(mat);
+  const hh = o.h || 1.2;
+  sp.scale.set(hh * cv.width / cv.height, hh, 1);
+  return sp;
+}
+function scGlow(hex, size){
+  const S = 128;
+  const cv = document.createElement('canvas');
+  cv.width = S; cv.height = S;
+  const ctx = cv.getContext('2d');
+  const c = new THREE.Color(hex);
+  const r = Math.round(c.r * 255), g = Math.round(c.g * 255), b = Math.round(c.b * 255);
+  const grd = ctx.createRadialGradient(S / 2, S / 2, 0, S / 2, S / 2, S / 2);
+  grd.addColorStop(0, 'rgba(255,255,255,0.95)');
+  grd.addColorStop(0.22, `rgba(${r},${g},${b},0.82)`);
+  grd.addColorStop(0.55, `rgba(${r},${g},${b},0.20)`);
+  grd.addColorStop(1, 'rgba(0,0,0,0)');
+  ctx.fillStyle = grd;
+  ctx.fillRect(0, 0, S, S);
+  const tex = new THREE.CanvasTexture(cv);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  const mat = new THREE.SpriteMaterial({
+    map: tex, transparent: true, blending: THREE.AdditiveBlending,
+    depthWrite: false, depthTest: false
+  });
+  const sp = new THREE.Sprite(mat);
+  sp.scale.set(size, size, 1);
+  return sp;
+}
+function scCircle(radius, color, opacity, seg){
+  const n = seg || 160;
+  const pts = [];
+  for (let i = 0; i <= n; i++){
+    const a = i / n * Math.PI * 2;
+    pts.push(new THREE.Vector3(Math.cos(a) * radius, 0, Math.sin(a) * radius));
+  }
+  const geo = new THREE.BufferGeometry().setFromPoints(pts);
+  const mat = new THREE.LineBasicMaterial({ color: color, transparent: true, opacity: opacity, depthWrite: false });
+  return new THREE.Line(geo, mat);
+}
+function scPoints(pos, col, size, opacity, additive){
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+  if (col) geo.setAttribute('color', new THREE.BufferAttribute(col, 3));
+  const mat = new THREE.PointsMaterial({
+    size: size, vertexColors: !!col, transparent: true, opacity: opacity,
+    depthWrite: false, sizeAttenuation: true,
+    blending: additive ? THREE.AdditiveBlending : THREE.NormalBlending
+  });
+  return new THREE.Points(geo, mat);
+}
+
+/* ---------- 第 2 级：邻近恒星（1 光年 = 6 场景单位） ---------- */
+const LY_UNIT = 6;
+function buildStarsLevel(){
+  const g = new THREE.Group();
+  const sunGlow = scGlow(0xffd27a, 7.5);
+  g.add(sunGlow);
+  const sunLab = scLabel('太阳', { color: '#ffd98a', h: 3.0 });
+  sunLab.position.set(0, 3.4, 0);
+  g.add(sunLab);
+
+  const STARS = [
+    { ly: 4.24,  s: 0.38, c: 0xff7a52, lab: '比邻星 · 4.24 光年' },
+    { ly: 4.37,  s: 0.62, c: 0xffd7a0, lab: '半人马座 α · 4.37 光年' },
+    { ly: 5.96,  s: 0.36, c: 0xff8a5c, lab: '巴纳德星 · 5.96 光年' },
+    { ly: 7.86,  s: 0.32, c: 0xff7a52, lab: null },
+    { ly: 8.31,  s: 0.46, c: 0xffb37a, lab: null },
+    { ly: 8.60,  s: 0.98, c: 0xa8d4ff, lab: '天狼星 · 8.60 光年' },
+    { ly: 9.69,  s: 0.34, c: 0xff7a52, lab: null },
+    { ly: 10.30, s: 0.36, c: 0xff8a5c, lab: null },
+    { ly: 10.50, s: 0.60, c: 0xffd7a0, lab: null },
+    { ly: 12.36, s: 0.42, c: 0xffb37a, lab: '鲁坦星 · 12.36 光年' }
+  ];
+  const N = STARS.length;
+  STARS.forEach((st, i) => {
+    /* 确定性球面分布（斐波那契球），并压扁 y 以贴近银盘观感 */
+    const yy = 1 - (i + 0.5) * 2 / N;
+    const rXZ = Math.sqrt(Math.max(0, 1 - yy * yy));
+    const phi = i * 2.399963229728653;
+    const d = st.ly * LY_UNIT;
+    const x = Math.cos(phi) * rXZ * d;
+    const z = Math.sin(phi) * rXZ * d;
+    const y = yy * 0.42 * d;
+    const glow = scGlow(st.c, st.s * 11);
+    glow.position.set(x, y, z);
+    g.add(glow);
+    if (st.lab){
+      const lb = scLabel(st.lab, { color: '#c9d4e8', h: 2.3, opacity: 0.9 });
+      lb.position.set(x, y + 2.6, z);
+      g.add(lb);
+    }
+  });
+
+  /* 距离参考环：5 光年 / 10 光年 */
+  g.add(scCircle(5 * LY_UNIT, 0x3c4a63, 0.5));
+  const l5 = scLabel('5 光年', { color: '#5f6f8c', h: 2.4, px: 32 });
+  l5.position.set(5 * LY_UNIT * 0.68, 0.6, 5 * LY_UNIT * 0.68);
+  g.add(l5);
+  g.add(scCircle(10 * LY_UNIT, 0x36435c, 0.38));
+  const l10 = scLabel('10 光年', { color: '#5f6f8c', h: 3.2, px: 32 });
+  l10.position.set(10 * LY_UNIT * 0.68, 0.8, 10 * LY_UNIT * 0.68);
+  g.add(l10);
+  return g;
+}
+
+/* ---------- 第 3 级：银河系（旋臂 + 太阳位置） ---------- */
+const GAL_R = 12;            // 银盘半径（对应约 5 万光年）
+const GAL_SUN_R = 6.24;      // 太阳距银心约 2.6 万光年
+function buildGalaxyLevel(){
+  const g = new THREE.Group();
+  const ARMS = 4;
+
+  /* 旋臂粒子（对数螺旋） */
+  const N_ARM = 6400;
+  const armPos = new Float32Array(N_ARM * 3), armCol = new Float32Array(N_ARM * 3);
+  const cIn = new THREE.Color(0xffd9a0), cMid = new THREE.Color(0xf2ead8), cOut = new THREE.Color(0x9fc4ff);
+  const tmp = new THREE.Color();
+  for (let i = 0; i < N_ARM; i++){
+    const t = Math.pow(Math.random(), 0.72);
+    const r = 1.5 + t * (GAL_R - 1.5);
+    const arm = i % ARMS;
+    const th0 = arm * Math.PI * 2 / ARMS;
+    const th = th0 + Math.log(r / 1.5) / 0.42;
+    const jw = 0.9 + t * 1.4;
+    const rr = r + (Math.random() - 0.5) * jw;
+    const ang = th + (Math.random() - 0.5) * (0.18 + t * 0.14);
+    armPos[i * 3] = Math.cos(ang) * rr;
+    armPos[i * 3 + 1] = (Math.random() - 0.5) * (0.55 * Math.exp(-t * 0.9) + 0.12);
+    armPos[i * 3 + 2] = Math.sin(ang) * rr;
+    const q = Math.min(1, Math.max(0, (rr - 1.5) / (GAL_R - 1.5)));
+    if (q < 0.5) tmp.copy(cIn).lerp(cMid, q / 0.5);
+    else tmp.copy(cMid).lerp(cOut, (q - 0.5) / 0.5);
+    const b = 0.62 + Math.random() * 0.42;
+    armCol[i * 3] = tmp.r * b;
+    armCol[i * 3 + 1] = tmp.g * b;
+    armCol[i * 3 + 2] = tmp.b * b;
+  }
+  g.add(scPoints(armPos, armCol, 0.16, 0.92, true));
+
+  /* 核球 */
+  const N_CORE = 1400;
+  const corePos = new Float32Array(N_CORE * 3), coreCol = new Float32Array(N_CORE * 3);
+  for (let i = 0; i < N_CORE; i++){
+    const u = Math.random() * Math.PI * 2;
+    const v = Math.acos(2 * Math.random() - 1);
+    const rr = Math.pow(Math.random(), 1.7) * 1.9;
+    corePos[i * 3] = Math.sin(v) * Math.cos(u) * rr;
+    corePos[i * 3 + 1] = Math.cos(v) * rr * 0.72;
+    corePos[i * 3 + 2] = Math.sin(v) * Math.sin(u) * rr;
+    const b = 0.7 + Math.random() * 0.3;
+    coreCol[i * 3] = 1.0 * b;
+    coreCol[i * 3 + 1] = 0.82 * b;
+    coreCol[i * 3 + 2] = 0.55 * b;
+  }
+  g.add(scPoints(corePos, coreCol, 0.2, 0.95, true));
+  const coreGlow = scGlow(0xffd79a, 3.4);
+  g.add(coreGlow);
+
+  /* 银晕 / 球状星团（稀疏外围） */
+  const N_HALO = 900;
+  const haloPos = new Float32Array(N_HALO * 3), haloCol = new Float32Array(N_HALO * 3);
+  for (let i = 0; i < N_HALO; i++){
+    const u = Math.random() * Math.PI * 2;
+    const v = Math.acos(2 * Math.random() - 1);
+    const rr = 2.0 + Math.pow(Math.random(), 0.6) * 15;
+    haloPos[i * 3] = Math.sin(v) * Math.cos(u) * rr;
+    haloPos[i * 3 + 1] = Math.cos(v) * rr * 0.85;
+    haloPos[i * 3 + 2] = Math.sin(v) * Math.sin(u) * rr;
+    const b = 0.22 + Math.random() * 0.32;
+    haloCol[i * 3] = 0.72 * b;
+    haloCol[i * 3 + 1] = 0.82 * b;
+    haloCol[i * 3 + 2] = 1.0 * b;
+  }
+  g.add(scPoints(haloPos, haloCol, 0.13, 0.7, true));
+
+  /* 太阳位置（猎户臂内侧） */
+  const sunAng = -0.85;
+  const sx = Math.cos(sunAng) * GAL_SUN_R;
+  const sz = Math.sin(sunAng) * GAL_SUN_R;
+  g.add(scCircle(GAL_SUN_R, 0xe3b45f, 0.16, 240));           // 太阳公转轨道示意
+  const link = new THREE.Line(
+    new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(sx, 0, sz), new THREE.Vector3(0, 0, 0)]),
+    new THREE.LineBasicMaterial({ color: 0xe3b45f, transparent: true, opacity: 0.3, depthWrite: false })
+  );
+  g.add(link);
+  const midLab = scLabel('约 2.6 万光年', { color: '#c9a35c', h: 0.95, px: 32 });
+  midLab.position.set(sx * 0.5, 0.55, sz * 0.5);
+  g.add(midLab);
+  const marker = scGlow(0xffd27a, 2.2);
+  marker.position.set(sx, 0, sz);
+  g.add(marker);
+  const ring = scCircle(0.5, 0xe3b45f, 0.9, 64);
+  ring.position.set(sx, 0, sz);
+  g.add(ring);
+  const sunLab = scLabel('太阳系 · 猎户臂', { color: '#ffd98a', h: 1.5 });
+  sunLab.position.set(sx, 1.7, sz);
+  g.add(sunLab);
+
+  /* 盘面尺度标注 */
+  const diaLab = scLabel('银河系直径约 10 万光年', { color: '#7c88a0', h: 1.35, px: 32 });
+  diaLab.position.set(0, 0.9, GAL_R + 1.6);
+  g.add(diaLab);
+  return g;
+}
+
+/* ---------- 第 4 级：本星系群 / 可观测宇宙 ---------- */
+function scSpiralGalaxy(radius, count, colIn, colOut, size, flat){
+  const pos = new Float32Array(count * 3), col = new Float32Array(count * 3);
+  const tmp = new THREE.Color();
+  for (let i = 0; i < count; i++){
+    const t = Math.pow(Math.random(), 0.7);
+    const r = 0.22 + t * radius;
+    const arm = i % 2;
+    const th = arm * Math.PI + Math.log(r / 0.22) / 0.42 + (Math.random() - 0.5) * (0.35 + t * 0.6);
+    pos[i * 3] = Math.cos(th) * r;
+    pos[i * 3 + 1] = (Math.random() - 0.5) * radius * flat * (1.1 - t * 0.5);
+    pos[i * 3 + 2] = Math.sin(th) * r;
+    tmp.copy(colIn).lerp(colOut, Math.random());
+    const b = 0.55 + Math.random() * 0.45;
+    col[i * 3] = tmp.r * b;
+    col[i * 3 + 1] = tmp.g * b;
+    col[i * 3 + 2] = tmp.b * b;
+  }
+  const p = scPoints(pos, col, size, 0.92, true);
+  const bulge = scGlow(colIn.getHex(), radius * 0.85);
+  const wrap = new THREE.Group();
+  wrap.add(p);
+  wrap.add(bulge);
+  return wrap;
+}
+function scDwarfCloud(radius, count, hex, size){
+  const pos = new Float32Array(count * 3), col = new Float32Array(count * 3);
+  const c = new THREE.Color(hex), tmp = new THREE.Color();
+  for (let i = 0; i < count; i++){
+    const u = Math.random() * Math.PI * 2;
+    const v = Math.acos(2 * Math.random() - 1);
+    const rr = radius * Math.pow(Math.random(), 0.55);
+    pos[i * 3] = Math.sin(v) * Math.cos(u) * rr;
+    pos[i * 3 + 1] = Math.cos(v) * rr * 0.7;
+    pos[i * 3 + 2] = Math.sin(v) * Math.sin(u) * rr;
+    tmp.copy(c);
+    const b = 0.45 + Math.random() * 0.55;
+    col[i * 3] = tmp.r * b;
+    col[i * 3 + 1] = tmp.g * b;
+    col[i * 3 + 2] = tmp.b * b;
+  }
+  return scPoints(pos, col, size, 0.9, true);
+}
+function buildCosmosLevel(){
+  const g = new THREE.Group();
+
+  /* 银河系（本星系群中心） */
+  const mw = scSpiralGalaxy(0.95, 900, new THREE.Color(0xfff0d0), new THREE.Color(0xa9c8ff), 0.075, 0.35);
+  g.add(mw);
+  const mwLab = scLabel('银河系', { color: '#eef2fb', h: 0.85 });
+  mwLab.position.set(0, 1.25, 0);
+  g.add(mwLab);
+
+  /* 仙女座星系 M31 · 约 254 万光年 */
+  const m31 = scSpiralGalaxy(1.15, 1100, new THREE.Color(0xfff4e0), new THREE.Color(0xd8e4ff), 0.075, 0.22);
+  m31.position.set(4.6, 0.25, -2.4);
+  g.add(m31);
+  const m31Lab = scLabel('仙女座星系 M31 · 254 万光年', { color: '#dbe5f7', h: 0.95 });
+  m31Lab.position.set(4.6, 1.5, -2.4);
+  g.add(m31Lab);
+
+  /* 三角座星系 M33 · 约 273 万光年 */
+  const m33 = scSpiralGalaxy(0.6, 520, new THREE.Color(0xe9f1ff), new THREE.Color(0x9dc0ff), 0.07, 0.3);
+  m33.position.set(1.7, -0.7, 5.3);
+  g.add(m33);
+  const m33Lab = scLabel('三角座星系 M33 · 273 万光年', { color: '#c9d5ea', h: 0.85 });
+  m33Lab.position.set(1.7, -1.7, 5.3);
+  g.add(m33Lab);
+
+  /* 麦哲伦云（银河系伴星系） */
+  const lmc = scDwarfCloud(0.28, 240, 0xdfe8ff, 0.06);
+  lmc.position.set(0.78, 0.16, -0.9);
+  g.add(lmc);
+  const lmcLab = scLabel('大麦哲伦云 · 16 万光年', { color: '#9fb0cc', h: 0.62, px: 32 });
+  lmcLab.position.set(0.78, 0.95, -0.9);
+  g.add(lmcLab);
+  const smc = scDwarfCloud(0.2, 160, 0xd8e4ff, 0.055);
+  smc.position.set(0.3, -0.3, -1.3);
+  g.add(smc);
+  const smcLab = scLabel('小麦哲伦云 · 20 万光年', { color: '#9fb0cc', h: 0.58, px: 32 });
+  smcLab.position.set(0.3, -1.15, -1.3);
+  g.add(smcLab);
+
+  /* 本星系群其他成员（示意） */
+  const others = [[-3.1, 0.9, 2.6], [-4.4, -1.0, -4.2], [3.6, 1.6, 4.4]];
+  others.forEach(p => {
+    const d = scDwarfCloud(0.22, 120, 0xcfe0ff, 0.05);
+    d.position.set(p[0], p[1], p[2]);
+    g.add(d);
+  });
+
+  /* 室女座星系团 · 约 5,400 万光年 */
+  const virgo = scDwarfCloud(1.7, 620, 0xf0e6d2, 0.07);
+  virgo.position.set(0, 1.6, 9.4);
+  g.add(virgo);
+  const virgoLab = scLabel('室女座星系团 · 约 5,400 万光年', { color: '#c6bfae', h: 0.95 });
+  virgoLab.position.set(0, 3.4, 9.4);
+  g.add(virgoLab);
+
+  /* 可观测宇宙边界 · 半径约 465 亿光年（薄球壳粒子） */
+  const R_UNI = 15;
+  const N_SHELL = 2600;
+  const shellPos = new Float32Array(N_SHELL * 3), shellCol = new Float32Array(N_SHELL * 3);
+  for (let i = 0; i < N_SHELL; i++){
+    const u = Math.random() * Math.PI * 2;
+    const v = Math.acos(2 * Math.random() - 1);
+    const rr = R_UNI * (0.985 + Math.random() * 0.015);
+    shellPos[i * 3] = Math.sin(v) * Math.cos(u) * rr;
+    shellPos[i * 3 + 1] = Math.cos(v) * rr;
+    shellPos[i * 3 + 2] = Math.sin(v) * Math.sin(u) * rr;
+    const b = 0.18 + Math.random() * 0.34;
+    shellCol[i * 3] = 0.62 * b;
+    shellCol[i * 3 + 1] = 0.76 * b;
+    shellCol[i * 3 + 2] = 1.0 * b;
+  }
+  g.add(scPoints(shellPos, shellCol, 0.055, 0.42, true));
+  const uniLab = scLabel('可观测宇宙 · 半径约 465 亿光年', { color: '#8fa6c8', h: 1.05, px: 34 });
+  uniLab.position.set(0, R_UNI + 1.2, 0);
+  g.add(uniLab);
+  const ageLab = scLabel('宇宙年龄约 138 亿年', { color: '#6c7c96', h: 0.85, px: 32 });
+  ageLab.position.set(0, -R_UNI - 0.9, 0);
+  g.add(ageLab);
+  return g;
+}
+
+/* ---------- 层级切换 ---------- */
+const SCALE_CAM = {
+  solar:  { pos: [0, 34, 90],  tgt: [0, 0, 0] },
+  stars:  { pos: [0, 46, 126], tgt: [0, 0, 0] },
+  galaxy: { pos: [0, 20, 33],  tgt: [0, 0, 0] },
+  cosmos: { pos: [2, 25, 48],  tgt: [0, 0, 0] }
+};
+function buildScaleLevel(key){
+  if (key === 'stars')  return buildStarsLevel();
+  if (key === 'galaxy') return buildGalaxyLevel();
+  return buildCosmosLevel();
+}
+function selectScale(key){
+  if (!SCALE_INFO[key]) return;
+  followKey = null;
+  followTrans = null;
+  hideAllScaleLevels();
+  navBtns.forEach(b => b.classList.remove('active'));
+
+  if (key === 'solar'){
+    scaleLevel = 0;
+    setSolarVisible(true);
+    selectedKey = 'solar';
+  } else {
+    scaleLevel = SCALE_LEVEL[key];
+    setSolarVisible(false);
+    if (!scaleCache[key]){
+      scaleCache[key] = buildScaleLevel(key);
+      scene.add(scaleCache[key]);
+    }
+    scaleCache[key].visible = true;
+    selectedKey = key;
+  }
+  setScaleActive(key);
+
+  const cam = SCALE_CAM[key];
+  scaleTrans = {
+    t: 0, dur: 1.8,
+    startPos: camera.position.clone(), startTgt: controls.target.clone(),
+    endPos: new THREE.Vector3(cam.pos[0], cam.pos[1], cam.pos[2]),
+    endTgt: new THREE.Vector3(cam.tgt[0], cam.tgt[1], cam.tgt[2])
+  };
+  refreshPanel();
+  refreshClock();
+}
+
+/* 左侧尺度导航点击 */
+scaleBtns.forEach(btn => btn.addEventListener('click', () => selectScale(btn.dataset.scale)));
+/* 点击原有天体导航时退出尺度层级（不改变原有跟随逻辑） */
+navBtns.forEach(btn => btn.addEventListener('click', () => {
+  scaleTrans = null;
+  if (scaleLevel !== 0){
+    scaleLevel = 0;
+    setSolarVisible(true);
+    hideAllScaleLevels();
+  }
+  setScaleActive(null);
+}));
+setScaleActive(null);
 
 /* ================= 自适应 ================= */
 function resize(){
