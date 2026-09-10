@@ -277,6 +277,45 @@
   #layerWord.on{opacity:1}
   #layerWord.on span{transform:scale(1)}
 
+  /* ===== 收起 / 展开 箭头：3D 画面右侧边缘垂直居中，紧贴信息面板左缘 ===== */
+  .ui-toggle{
+    position:absolute;top:50%;right:0;transform:translateY(-50%);
+    width:26px;height:94px;padding:0;margin:0;
+    display:flex;align-items:center;justify-content:center;
+    background:linear-gradient(90deg,rgba(10,14,24,0),rgba(10,14,24,.92));
+    border:none;cursor:pointer;z-index:3;
+    color:#8794ab;font:inherit;
+    text-shadow:0 0 10px rgba(0,0,0,.9);
+    -webkit-tap-highlight-color:transparent;
+    transition:color .22s ease,opacity .42s ease;
+  }
+  /* 视觉为细箭头，热区扩大到 56×146（≥44px） */
+  .ui-toggle::after{content:'';position:absolute;top:-26px;bottom:-26px;left:-30px;right:-6px}
+  .ui-toggle .chev{
+    display:block;font-size:19px;line-height:1;
+    transition:transform .5s cubic-bezier(.4,.02,.2,1);
+  }
+  .ui-toggle:hover{color:#e3b45f}
+  .ui-toggle:focus-visible{outline:1px solid rgba(227,180,95,.6);outline-offset:-3px}
+  #app.ui-collapsed .ui-toggle{opacity:.78}
+  #app.ui-collapsed .ui-toggle:hover{opacity:1}
+  #app.ui-collapsed .ui-toggle .chev{transform:rotate(180deg)}
+
+  /* ===== 收起态：左右栏连文字一起滑出，中央 3D 全景铺满 ===== */
+  #side,#panel{
+    transition:opacity .42s cubic-bezier(.4,.02,.2,1),
+               transform .5s cubic-bezier(.4,.02,.2,1),
+               margin .5s cubic-bezier(.4,.02,.2,1);
+  }
+  #app.ui-collapsed #side{
+    transform:translateX(-100%);margin-left:-172px;
+    opacity:0;pointer-events:none;
+  }
+  #app.ui-collapsed #panel{
+    transform:translateX(100%);margin-right:-316px;
+    opacity:0;pointer-events:none;
+  }
+
   @media (max-width:900px){
     .cover-nav,.cover-meta{display:none}
     .cover-logo{left:24px;top:26px}
@@ -334,6 +373,7 @@
   <main id="stage">
     <canvas id="sceneCanvas"></canvas>
     <div class="stage-hint"><b>左键拖拽</b>旋转视角 · <b>滚轮</b>缩放 · 点击左侧天体<b>跟随</b> · 点「总览」返回</div>
+    <button class="ui-toggle" id="uiToggle" type="button" title="收起侧栏与信息面板" aria-label="收起侧栏与信息面板" aria-expanded="true"><span class="chev">›</span></button>
   </main>
   <aside id="panel">
     <div class="sel-title" id="selName">太阳系总览</div>
@@ -2368,15 +2408,58 @@ try {
 }
 
 /* ================= 自适应 ================= */
+let lastStageW = 0, lastStageH = 0;
 function resize(){
   const stage = $('stage');
   const w = Math.max(stage.clientWidth, 2);
   const h = Math.max(stage.clientHeight, 2);
+  if (w === lastStageW && h === lastStageH) return;  /* 尺寸未变则不重设缓冲，避免清屏闪烁 */
+  lastStageW = w; lastStageH = h;
   renderer.setSize(w, h, false);
   camera.aspect = w / h;
   camera.updateProjectionMatrix();
 }
 window.addEventListener('resize', resize);
+
+/* ================= 收起 / 展开：右侧中部回收箭头 ================= */
+/* 收起时左右栏整体滑出（中央 3D 全景铺满），过程中逐帧同步 resize，保证画面不变形 */
+const UI_TOGGLE_MOTION = 560;   /* 与 CSS 过渡时长匹配的尺寸同步窗口(ms) */
+let uiCollapsed = false;
+let uiResizeRaf = 0;
+
+function syncResizeDuringMotion(ms){
+  cancelAnimationFrame(uiResizeRaf);
+  const t0 = performance.now();
+  const step = () => {
+    resize();
+    if (performance.now() - t0 < ms) uiResizeRaf = requestAnimationFrame(step);
+    else uiResizeRaf = 0;
+  };
+  uiResizeRaf = requestAnimationFrame(step);
+}
+
+const uiToggleEl = document.getElementById('uiToggle');
+function setUiCollapsed(next){
+  uiCollapsed = !!next;
+  appEl.classList.toggle('ui-collapsed', uiCollapsed);
+  if (uiToggleEl){
+    uiToggleEl.setAttribute('aria-expanded', uiCollapsed ? 'false' : 'true');
+    uiToggleEl.setAttribute('aria-label', uiCollapsed ? '展开侧栏与信息面板' : '收起侧栏与信息面板');
+    uiToggleEl.title = uiCollapsed ? '展开侧栏与信息面板' : '收起侧栏与信息面板';
+  }
+  syncResizeDuringMotion(UI_TOGGLE_MOTION);
+}
+if (uiToggleEl){
+  uiToggleEl.addEventListener('click', (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setUiCollapsed(!uiCollapsed);
+  });
+}
+['side','panel'].forEach(id => {
+  const el = document.getElementById(id);
+  if (el) el.addEventListener('transitionend', (e) => { if (e.target === el) resize(); });
+});
 
 /* 面板节流刷新（约 4Hz） */
 setInterval(() => { refreshClock(); }, 250);
