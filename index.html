@@ -373,6 +373,73 @@
     .cover-word{font-size:21vw;letter-spacing:.14em}
     .cover-bg{background-position:50% 64%}
   }
+
+  /* =================================================================
+     新增六项功能配套样式（黑洞入口 / 层级引言 / 光速旅行 / 窄屏手势适配）
+     ================================================================= */
+  .bh-btn{
+    display:block;width:100%;text-align:left;
+    padding:7px 12px 7px 16px;margin-top:2px;
+    font:12px/1.6 inherit;letter-spacing:.14em;color:#8fb2d6;
+    background:none;border:none;border-left:2px solid transparent;
+    cursor:pointer;user-select:none;white-space:nowrap;
+    -webkit-tap-highlight-color:transparent;
+    transition:color .18s ease,border-color .18s ease;
+  }
+  .bh-btn:hover{color:#e2ecfa}
+  .bh-btn.active{color:var(--gold);border-left-color:var(--gold);font-weight:500}
+
+  #bhInfo{display:none}
+  #bhInfo .bh-tag{
+    font-size:10px;color:#5c6880;letter-spacing:.24em;
+    border-top:1px solid var(--line);margin-top:14px;padding-top:12px;
+  }
+
+  /* 层级引言：与中央大字同层，随大字一同浮现 / 淡出 */
+  #layerQuote{
+    position:absolute;left:0;right:0;top:63%;
+    padding:0 8vw;text-align:center;pointer-events:none;
+    font-size:clamp(11px,1.15vw,14px);line-height:1.95;
+    letter-spacing:.22em;color:#a8b8ce;
+    opacity:0;transform:translateY(9px);
+    transition:opacity .72s ease,transform 2.2s cubic-bezier(.2,.7,.2,1);
+  }
+  #layerWord.on #layerQuote{opacity:.72;transform:none}
+
+  /* 光速旅行 */
+  .light-row{display:flex;flex-wrap:wrap;gap:4px;margin:10px 0 6px}
+  .light-row .ghost-btn{flex:1 1 42%;padding:6px 4px;text-align:center;letter-spacing:.1em}
+  .light-row .ghost-btn.on{border-color:rgba(227,180,95,.9);color:#f2d9a4}
+
+  #sceneCanvas{touch-action:none}
+
+  /* 窄屏 / 触屏：左右栏改为浮层，默认收起，避免遮挡中央画面与溢出 */
+  @media (max-width:820px){
+    .stage-hint{display:none}
+    #side{
+      position:absolute;left:0;top:0;bottom:0;z-index:4;
+      width:150px;flex:0 0 150px;padding:16px 8px 16px 10px;
+      background:rgba(5,7,13,.90);
+      -webkit-backdrop-filter:blur(8px);backdrop-filter:blur(8px);
+    }
+    #panel{
+      position:absolute;right:0;top:0;bottom:0;z-index:4;
+      width:min(84vw,320px);flex:0 0 auto;padding:18px 16px 26px;
+      background:rgba(5,7,13,.94);
+      -webkit-backdrop-filter:blur(8px);backdrop-filter:blur(8px);
+    }
+    #app.ui-collapsed #side{margin-left:0}
+    #app.ui-collapsed #panel{margin-right:0}
+    .nav-btn,.bh-btn{padding:10px 10px 10px 12px;font-size:13px}
+    .scale-btn{padding:9px 10px 9px 12px;font-size:12px}
+    .ui-toggle{width:34px;height:112px}
+    .ui-toggle::after{top:-22px;bottom:-22px;left:-16px;right:-8px}
+    #layerWord span{font-size:16vw;letter-spacing:.10em}
+    #layerQuote{top:57%;font-size:11px;letter-spacing:.16em;padding:0 10vw}
+  }
+  @media (max-width:520px){
+    #side{width:132px;flex-basis:132px}
+  }
 </style>
 </head>
 <body>
@@ -417,7 +484,9 @@
     <button class="scale-btn" data-scale="stars">邻近恒星</button>
     <button class="scale-btn" data-scale="galaxy">银河系</button>
     <button class="scale-btn" data-scale="cosmos">星系群 · 可观测宇宙</button>
-    <div class="side-note">以太阳为中心公转，<br>轨道半径已适度压缩以利阅读。</div>
+    <div class="side-group">引力透镜 · 黑洞</div>
+    <button class="bh-btn" id="bhBtn" type="button">黑洞 · 引力透镜</button>
+    <div class="side-note">以太阳为中心公转，<br>轨道半径已适度压缩以利阅读。<br>黑洞与光速旅行为示意缩放。</div>
   </aside>
   <main id="stage">
     <canvas id="sceneCanvas"></canvas>
@@ -438,6 +507,15 @@
     <div class="kv"><span class="k">表面温度</span><span class="v" id="fTemp">—</span></div>
     <div class="kv"><span class="k">已知卫星</span><span class="v" id="fMoons">—</span></div>
     <div id="desc">太阳系以太阳为中心，包含八大行星、矮行星、小行星带与无数小天体。轨道尺度巨大，本页为清晰展示已做几何压缩；右侧可调节模拟时钟流速。</div>
+    <div id="bhInfo">
+      <div class="bh-tag">引力透镜 · 关键数据</div>
+      <div class="kv"><span class="k">史瓦西半径</span><span class="v mono" id="fbhRs">约 1.9×10¹⁰ km</span></div>
+      <div class="kv"><span class="k">质量量级</span><span class="v" id="fbhM">约 65 亿倍太阳质量</span></div>
+      <div class="kv"><span class="k">事件视界直径</span><span class="v" id="fbhD">约 254 au · 380 亿 km</span></div>
+      <div class="kv"><span class="k">光子环半径</span><span class="v" id="fbhP">约 1.5 倍史瓦西半径</span></div>
+      <div class="kv"><span class="k">吸积盘内缘</span><span class="v" id="fbhV">约 0.4–0.9 倍光速</span></div>
+      <div class="kv"><span class="k">观测参照</span><span class="v" id="fbhRef">M87* · 2019 年首张照片</span></div>
+    </div>
     <div class="ctl-title">模拟速度</div>
     <div class="sim-ctl">
       <button class="sim-btn active" data-mult="1">1×</button>
@@ -460,11 +538,24 @@
     <div class="tt-tip">拖拽/输入日期后，行星按各自真实公转周期重定位，再继续推进。</div>
     <div class="ctl-title">聆听 · 行星音景</div>
     <button class="ghost-btn" id="listenBtn">聆听当前天体</button>
+    <div class="ctl-title">光速旅行 · 从太阳出发</div>
+    <div class="light-row" id="lightBtns">
+      <button class="ghost-btn" type="button" data-lt="earth">地球</button>
+      <button class="ghost-btn" type="button" data-lt="mars">火星</button>
+      <button class="ghost-btn" type="button" data-lt="jupiter">木星</button>
+      <button class="ghost-btn" type="button" data-lt="neptune">海王星</button>
+    </div>
+    <div id="lightRead">
+      <div class="kv"><span class="k">目标</span><span class="v" id="flTarget">—</span></div>
+      <div class="kv"><span class="k">光行时间</span><span class="v mono" id="flTime">—</span></div>
+      <div class="kv"><span class="k">已走距离</span><span class="v mono" id="flDist">—</span></div>
+      <div class="kv"><span class="k">状态</span><span class="v" id="flState">未开始 · 快捷键 L</span></div>
+    </div>
   </aside>
 </div>
 
 <!-- 切换层级时中央浮现的大字层（新增） -->
-<div id="layerWord"><span id="layerWordText"></span></div>
+<div id="layerWord"><span id="layerWordText"></span><div id="layerQuote"></div></div>
 
 <script type="importmap">
 { "imports": {
@@ -1192,6 +1283,8 @@ FEATURE.load = function(url, srgb){
   return t;
 };
 function featureTick(dt){
+  /* 新增六项功能统一调度：须先于层级早退，保证非太阳系层级也能逐帧更新 */
+  f6Tick(dt);
   /* 宇宙尺度层级下：清理并暂停太阳系瞬态天体（彗星 / 流星）（新增） */
   if (scaleLevel !== 0){
     if (comet) removeComet();
@@ -2548,6 +2641,498 @@ setInterval(() => { refreshClock(); }, 250);
 refreshPanel();
 refreshClock();
 resize();
+
+/* =====================================================================
+   追加功能块（六项）：
+   ① 黑洞引力透镜  ② 轨道尾迹  ③ 面板打字机
+   ④ 移动端手势    ⑤ 每层一句引言  ⑥ 光速旅行
+   —— 全部程序化生成，不引外部图片 / 字体；统一由 f6Tick 逐帧调度
+   ===================================================================== */
+const F6 = { trails: [], trailGroup: null, bh: null };
+const _f6v1 = new THREE.Vector3();
+const _f6v2 = new THREE.Vector3();
+
+/* ---------------- ① 黑洞引力透镜：Shader billboard（无全屏后处理） ---------------- */
+const BH_POS  = new THREE.Vector3(-1.7, 0.42, -5.3);
+const BH_SIZE = 3.1;
+const BH_UNI = {
+  uTime: { value: 0 },
+  uRs:   { value: 0.30 },    // 事件视界（归一化半径）
+  uLens: { value: 0.055 }    // 引力偏折强度
+};
+
+BODY.bh = {
+  name: '黑洞', en: 'BLACK HOLE · GRAVITATIONAL LENSING',
+  dist: '距地球约 5,500 万光年（以 M87* 为参照）',
+  period: '视界处逃逸速度 = 光速',
+  vel: '吸积盘内缘约 0.4–0.9 c',
+  rot: '盘面近开普勒差速旋转',
+  dia: '史瓦西半径约 1.9 × 10¹⁰ km',
+  temp: '吸积盘内缘可达数百万 K',
+  moons: '—',
+  desc: '黑洞是时空曲率极大、连光也无法逃逸的天体。此处由 Shader 程序化绘制：中心绝对黑的事件视界、纤细的光子环与倾斜吸积盘；背景星光被引力偏折，在特定半径上汇聚成爱因斯坦环。数值取 M87* 一类超大质量黑洞的科普量级，仅作示意。'
+};
+
+function f6MakeBlackHole(){
+  const mat = new THREE.ShaderMaterial({
+    uniforms: BH_UNI, transparent: true, depthWrite: false, side: THREE.DoubleSide,
+    vertexShader: `
+      varying vec2 vUv;
+      void main(){
+        vUv = uv;
+        gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+      }`,
+    fragmentShader: `
+      uniform float uTime; uniform float uRs; uniform float uLens;
+      varying vec2 vUv;
+      float hash21(vec2 p){ p = fract(p * vec2(123.34, 345.45)); p += dot(p, p + 34.345); return fract(p.x * p.y); }
+      float starLayer(vec2 uv, float dens, float thr){
+        vec2 g = uv * dens;
+        vec2 id = floor(g);
+        vec2 f = fract(g) - 0.5;
+        float h = hash21(id);
+        if (h < thr) return 0.0;
+        vec2 off = (vec2(hash21(id + 2.3), hash21(id + 7.1)) - 0.5) * 0.68;
+        float d = length(f - off);
+        return smoothstep(0.15, 0.0, d) * (0.35 + 0.65 * hash21(id + 11.7));
+      }
+      void main(){
+        vec2 p = (vUv - 0.5) * 2.0;
+        float r = length(p);
+        if (r > 1.0) discard;
+        /* 引力透镜：背景星光采样坐标被径向拉伸，在环半径处汇聚 */
+        float bend = min(uLens / max(r * r, 0.05), 5.0);
+        vec2 q = p * (1.0 + bend) + vec2(0.0, uTime * 0.004);
+        float st = starLayer(q * 3.4, 9.0, 0.82) * 0.95
+                 + starLayer(q * 7.6, 17.0, 0.87) * 0.50;
+        float ringE   = exp(-pow((r - 0.47) / 0.050, 2.0));                /* 爱因斯坦环 */
+        float horizon = 1.0 - smoothstep(uRs - 0.012, uRs + 0.012, r);     /* 事件视界 */
+        float photo   = exp(-pow((r - uRs) / 0.017, 2.0));                 /* 光子环 */
+        /* 倾斜吸积盘：椭圆环带 + 缓慢旋进 */
+        float ca = cos(0.42), sa = sin(0.42);
+        vec2 d = vec2(p.x * ca - (p.y / 0.34) * sa, p.x * sa + (p.y / 0.34) * ca);
+        float dr = length(d);
+        float band  = smoothstep(1.22, 0.94, dr) * smoothstep(0.30, 0.46, dr);
+        float swirl = 0.72 + 0.28 * sin(atan(d.y, d.x) * 3.0 - uTime * 0.55 + dr * 7.0);
+        float disk  = band * swirl;
+        /* 被引力抬起、绕到视界上方的远侧盘弧（弱镜像） */
+        float dr2   = length(vec2(d.x, -d.y));
+        float disk2 = smoothstep(1.04, 0.94, dr2) * smoothstep(0.46, 0.58, dr2) * 0.42;
+        float occl  = smoothstep(uRs * 0.97, uRs * 1.07, r);
+        vec3 diskCol = mix(vec3(1.0, 0.66, 0.32), vec3(1.0, 0.93, 0.80), clamp(band * 1.4, 0.0, 1.0));
+        vec3 col = vec3(0.0);
+        float a = 0.0;
+        float starA = st * (0.5 + 0.5 * ringE) * smoothstep(1.0, 0.72, r);
+        col += vec3(0.70, 0.82, 1.00) * starA;
+        a = max(a, starA);
+        float ringA = clamp(photo * 1.5 + ringE * 0.42, 0.0, 1.0);
+        col += vec3(1.00, 0.90, 0.74) * (photo * 1.5 + ringE * 0.42);
+        a = max(a, ringA);
+        float diskA = clamp((disk * 0.92 + disk2) * occl, 0.0, 1.0);
+        col += diskCol * (disk * 0.92 + disk2) * occl;
+        a = max(a, diskA);
+        col *= (1.0 - horizon);              /* 视界之内绝对黑 */
+        a = max(a, horizon);
+        gl_FragColor = vec4(col, a);
+      }`
+  });
+  const mesh = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), mat);
+  mesh.scale.set(BH_SIZE, BH_SIZE, 1);
+  mesh.position.copy(BH_POS);
+  mesh.renderOrder = 4;
+  mesh.frustumCulled = false;
+  return mesh;
+}
+
+/* cosmos 层级首次构建时，把 billboard 与标注挂进该 Group */
+const _f6BuildScaleLevel = buildScaleLevel;
+buildScaleLevel = function(key){
+  const g = _f6BuildScaleLevel(key);
+  if (key === 'cosmos' && !F6.bh){
+    F6.bh = f6MakeBlackHole();
+    g.add(F6.bh);
+    const lab = scLabel('黑洞 · 引力透镜（示意）', { color: '#cbd6ea', h: 0.62, px: 34, opacity: 0.7 });
+    lab.position.set(BH_POS.x, BH_POS.y - BH_SIZE * 0.56, BH_POS.z);
+    g.add(lab);
+  }
+  return g;
+};
+
+function f6TickBlackHole(){
+  if (!F6.bh) return;
+  const vis = (scaleLevel === 3);
+  if (F6.bh.visible !== vis) F6.bh.visible = vis;
+  if (vis) F6.bh.quaternion.copy(camera.quaternion);   /* billboard：始终正对相机 */
+}
+
+/* 点击左侧「黑洞 · 引力透镜」进入，并把相机聚焦到该面片 */
+function f6FocusBlackHole(){
+  selectScale('cosmos');
+  const wp  = BH_POS.clone();
+  const dir = new THREE.Vector3(0.14, 0.26, 1.0).normalize();
+  scaleTrans = {
+    t: 0, dur: 1.5,
+    startPos: camera.position.clone(), startTgt: controls.target.clone(),
+    endPos: wp.clone().add(dir.multiplyScalar(BH_SIZE * 2.45)), endTgt: wp.clone()
+  };
+  selectedKey = 'bh';
+  setActiveNav(null);
+  setScaleActive('cosmos');
+  refreshPanel();
+  refreshClock();
+}
+
+/* ---------------- ② 轨道尾迹：静态环形几何 + 角度渐变（头部亮、尾部淡） ---------------- */
+function f6BuildTrails(){
+  const grp = new THREE.Group();
+  grp.name = 'f6-trails';
+  ORDER.forEach(key => {
+    const d = BODY[key];
+    if (!d || !d.orbitR) return;
+    const periodDisplay = Math.pow(d.periodDays, 0.62) * 3.5;                       // 与主循环同一公式
+    const span = THREE.MathUtils.clamp(0.55 * Math.sqrt(140 / periodDisplay), 0.26, 1.15); // 公转越快尾迹越长
+    const N = 180, R = d.orbitR * 1.0028;
+    const posArr = new Float32Array(N * 3);
+    const angArr = new Float32Array(N);
+    for (let i = 0; i < N; i++){
+      const a = i / N * Math.PI * 2;
+      posArr[i * 3]     = Math.cos(a) * R;
+      posArr[i * 3 + 1] = 0.014;
+      posArr[i * 3 + 2] = Math.sin(a) * R;
+      angArr[i] = a;
+    }
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute('position', new THREE.BufferAttribute(posArr, 3));
+    geo.setAttribute('aAng', new THREE.BufferAttribute(angArr, 1));
+    const mat = new THREE.ShaderMaterial({
+      transparent: true, depthWrite: false, blending: THREE.AdditiveBlending,
+      uniforms: {
+        uHead: { value: 0 }, uSpan: { value: span },
+        uColor: { value: new THREE.Color(0xa9d4ff) }, uOpacity: { value: 0.58 }
+      },
+      vertexShader: `
+        attribute float aAng;
+        varying float vAng;
+        void main(){
+          vAng = aAng;
+          gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+        }`,
+      fragmentShader: `
+        uniform float uHead; uniform float uSpan; uniform vec3 uColor; uniform float uOpacity;
+        varying float vAng;
+        void main(){
+          float dd = mod(uHead - vAng + 6.28318530718, 6.28318530718);
+          float a = clamp(1.0 - dd / uSpan, 0.0, 1.0);
+          a = pow(a, 1.5) * uOpacity;
+          if (a < 0.004) discard;
+          gl_FragColor = vec4(uColor, a);
+        }`
+    });
+    const line = new THREE.Line(geo, mat);
+    line.frustumCulled = false;
+    grp.add(line);
+    F6.trails.push({ key: key, mat: mat });
+  });
+  scene.add(grp);
+  SS_OBJS.push(grp);      /* 与太阳系对象一同显隐，切层 / 跟随不错乱 */
+  F6.trailGroup = grp;
+}
+function f6TickTrails(){
+  if (!F6.trailGroup) return;
+  const vis = (scaleLevel === 0);
+  if (F6.trailGroup.visible !== vis) F6.trailGroup.visible = vis;
+  if (!vis) return;
+  for (let i = 0; i < F6.trails.length; i++){
+    const t = F6.trails[i];
+    const b = bodies[t.key];
+    if (b) t.mat.uniforms.uHead.value = b.angle || 0;
+  }
+}
+
+/* ---------------- ③ 面板打字机：逐行浮现 + 数字滚动 ---------------- */
+const TW = { items: [], t0: 0, active: false };
+const TW_STATIC = new Map();       /* 静态行（黑洞数据）的原始文案，避免二次读取到中间态 */
+function twRows(){
+  const all = Array.prototype.slice.call(document.querySelectorAll('#panel .kv, #panel #desc'));
+  return all.filter(el => el.offsetParent !== null && !el.closest('#lightRead') && !el.closest('#lightBtns'));
+}
+function twParse(text){
+  const m = /^(.*?)(\d[\d,]*(?:\.\d+)?)([\s\S]*)$/.exec(text || '');
+  if (!m) return null;
+  const raw = m[2];
+  const val = parseFloat(raw.replace(/,/g, ''));
+  if (!isFinite(val)) return null;
+  const dot = raw.indexOf('.');
+  return { pre: m[1], post: m[3], val: val, dec: dot < 0 ? 0 : raw.length - dot - 1, comma: raw.indexOf(',') >= 0 };
+}
+function twFormat(info, v){
+  const s = info.comma ? Math.round(v).toLocaleString() : v.toFixed(info.dec);
+  return info.pre + s + info.post;
+}
+const twEase = t => 1 - Math.pow(1 - t, 3);
+function twClear(){
+  for (let i = 0; i < TW.items.length; i++){
+    TW.items[i].row.style.opacity = '';
+    TW.items[i].row.style.transform = '';
+  }
+  TW.items = [];
+  TW.active = false;
+}
+function twArm(){
+  twClear();                                  /* 打断上一次动画，不残留数字与位移 */
+  const rows = twRows();
+  if (!rows.length) return;
+  let idx = 0;
+  TW.items = rows.map(row => {
+    const vEl = row.querySelector('.v');
+    const holder = vEl || row;
+    let target;
+    if (TW_STATIC.has(row)) target = TW_STATIC.get(row);
+    else target = vEl ? vEl.textContent : row.textContent;
+    const num = (holder.id === 'fDate') ? null : twParse(target);   /* 日期整体浮现，不做数字滚动 */
+    return { row: row, holder: holder, target: target, num: num, delay: idx++ * 62, dur: 460 };
+  });
+  TW.t0 = performance.now();
+  TW.active = true;
+  for (let i = 0; i < TW.items.length; i++){
+    const it = TW.items[i];
+    it.row.style.opacity = '0';
+    it.row.style.transform = 'translateY(7px)';
+    if (it.num) it.holder.textContent = twFormat(it.num, 0);
+  }
+}
+function twFinish(){
+  for (let i = 0; i < TW.items.length; i++){
+    const it = TW.items[i];
+    it.holder.textContent = it.target;
+    it.row.style.opacity = '';
+    it.row.style.transform = '';
+  }
+  TW.items = [];
+  TW.active = false;
+}
+function twTick(){
+  if (!TW.active) return;
+  const now = performance.now();
+  let allDone = true;
+  for (let i = 0; i < TW.items.length; i++){
+    const it = TW.items[i];
+    let p = (now - TW.t0 - it.delay) / it.dur;
+    if (p < 0) p = 0;
+    if (p >= 1) p = 1; else allDone = false;
+    const e = twEase(p);
+    it.row.style.opacity = String(0.02 + 0.98 * e);
+    it.row.style.transform = 'translateY(' + ((1 - e) * 7).toFixed(2) + 'px)';
+    if (it.num) it.holder.textContent = (p >= 1) ? it.target : twFormat(it.num, it.num.val * e);
+    else if (p >= 1) it.holder.textContent = it.target;
+  }
+  if (allDone) twFinish();
+}
+
+/* ---------------- ⑤ 每层一句引言（与中央大字同节奏） ---------------- */
+const LAYER_QUOTE = {
+  solar:  '地球是已知唯一孕育生命的世界 · 一粒悬浮在阳光中的尘埃',
+  stars:  '最近的恒星相距 4.24 光年 · 光也要走四年多',
+  galaxy: '银河系直径约 10 万光年 · 太阳距银心约 2.6 万光年',
+  cosmos: '可观测宇宙半径约 465 亿光年 · 我们只看见其中一角'
+};
+let f6PendingScale = null, f6PendingAt = 0;
+
+/* ---------------- ⑥ 光速旅行 ---------------- */
+const AU_KM = 1.495978707e8, C_KM_S = 299792.458;
+const LIGHT_TARGETS = {
+  earth:   { label: '地球',   au: 1.000 },
+  mars:    { label: '火星',   au: 1.524 },
+  jupiter: { label: '木星',   au: 5.203 },
+  neptune: { label: '海王星', au: 30.07 }
+};
+const LT = { key: null, label: '', au: 0, realSec: 0, dur: 4, t: 0, arrived: true, acc: 0, wrote: false, group: null, sprite: null, line: null };
+
+function f6FmtDur(sec){
+  sec = Math.max(0, sec);
+  if (sec < 60) return sec.toFixed(1) + ' 秒';
+  const m = Math.floor(sec / 60), s = Math.round(sec - m * 60);
+  if (m < 60) return m + ' 分 ' + String(s).padStart(2, '0') + ' 秒';
+  const h = Math.floor(m / 60), mm = m - h * 60;
+  return h + ' 小时 ' + String(mm).padStart(2, '0') + ' 分';
+}
+function f6FmtDist(km){
+  if (km >= 1e8) return (km / 1e8).toFixed(3) + ' 亿 km';
+  if (km >= 1e4) return (km / 1e4).toFixed(2) + ' 万 km';
+  return Math.round(km).toLocaleString() + ' km';
+}
+function f6BuildTravel(){
+  const g = new THREE.Group();
+  g.visible = false;
+  LT.sprite = scGlow(0xbfe3ff, 2.4);            /* 细亮光点：白核 + 冷蓝晕 */
+  LT.sprite.material.opacity = 0.92;
+  g.add(LT.sprite);
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute('position', new THREE.BufferAttribute(new Float32Array(6), 3));
+  LT.line = new THREE.Line(geo, new THREE.LineBasicMaterial({
+    color: 0x9ed6ff, transparent: true, opacity: 0.16,
+    blending: THREE.AdditiveBlending, depthWrite: false
+  }));
+  LT.line.frustumCulled = false;
+  g.add(LT.line);
+  LT.group = g;
+  scene.add(g);
+  SS_OBJS.push(g);
+}
+function f6StartTravel(key){
+  const t = LIGHT_TARGETS[key];
+  if (!t) return;
+  if (scaleLevel !== 0) selectScale('solar');   /* 回到太阳系层，保留既有转场，不打断相机飞行 */
+  LT.key = key; LT.label = t.label; LT.au = t.au;
+  LT.realSec = t.au * AU_KM / C_KM_S;
+  LT.dur = Math.min(5.6, Math.max(3.0, 2.6 + 1.15 * Math.log10(1 + LT.realSec / 30)));
+  LT.t = 0; LT.arrived = false; LT.acc = 1; LT.wrote = false;
+  LT.group.visible = true;
+  const btns = document.querySelectorAll('#lightBtns .ghost-btn');
+  for (let i = 0; i < btns.length; i++) btns[i].classList.toggle('on', btns[i].dataset.lt === key);
+  $('flTarget').textContent = t.label + ' · ' + t.au.toFixed(3) + ' au';
+  $('flState').textContent = '光点已出发 · 行进中';
+}
+function f6TickTravel(dt){
+  if (!LT.key || !LT.group) return;
+  if (scaleLevel !== 0){
+    if (LT.group.visible) LT.group.visible = false;
+    return;
+  }
+  LT.group.visible = true;
+  const sun = bodyWorld('sun', _f6v1);
+  const tgt = bodyWorld(LT.key, _f6v2);
+  const pos = LT.line.geometry.getAttribute('position');
+  pos.setXYZ(0, sun.x, sun.y, sun.z);
+  pos.setXYZ(1, tgt.x, tgt.y, tgt.z);
+  pos.needsUpdate = true;
+  if (!LT.arrived){
+    LT.t = Math.min(1, LT.t + dt / LT.dur);
+    if (LT.t >= 1){ LT.t = 1; LT.arrived = true; }
+  }
+  const p = LT.t;
+  LT.sprite.position.set(sun.x + (tgt.x - sun.x) * p, sun.y + (tgt.y - sun.y) * p, sun.z + (tgt.z - sun.z) * p);
+  const pulse = 1 + 0.16 * Math.sin(performance.now() * 0.006);
+  const camD = camera.position.distanceTo(LT.sprite.position);      /* 拉远时略微放大，保证可读 */
+  const sz = 2.4 * THREE.MathUtils.clamp(camD / 60, 1, 3.0) * pulse;
+  LT.sprite.scale.set(sz, sz, 1);
+  LT.acc += dt;
+  if (LT.acc > 0.1 || (LT.arrived && !LT.wrote)){
+    LT.acc = 0; LT.wrote = LT.arrived;
+    $('flTime').textContent = f6FmtDur(LT.realSec * p) + '（全程 ' + f6FmtDur(LT.realSec) + '）';
+    $('flDist').textContent = f6FmtDist(LT.au * AU_KM * p) + ' / ' + f6FmtDist(LT.au * AU_KM);
+    $('flState').textContent = LT.arrived ? '已抵达 · 读数保留' : '行进中 ' + Math.round(p * 100) + '%';
+  }
+}
+
+/* ---------------- 统一调度（由 featureTick 顶部调用） ---------------- */
+function f6Tick(dt){
+  BH_UNI.uTime.value += dt;
+  f6TickBlackHole();
+  f6TickTrails();
+  f6TickTravel(dt);
+  twTick();
+}
+
+/* ---------------- 钩子：面板刷新 -> 打字机；层级切换 -> 引言 ---------------- */
+const _f6RefreshPanel = refreshPanel;
+refreshPanel = function(){
+  _f6RefreshPanel();
+  const bi = $('bhInfo');
+  if (bi) bi.style.display = (selectedKey === 'bh') ? 'block' : 'none';
+  const bb = document.getElementById('bhBtn');
+  if (bb) bb.classList.toggle('active', selectedKey === 'bh' && scaleLevel === 3);
+  twArm();
+};
+const _f6RefreshClock = refreshClock;
+refreshClock = function(){
+  if (TW.active) return;      /* 打字机播报期间不覆盖正在滚动的行 */
+  _f6RefreshClock();
+};
+const _f6SelectScale = selectScale;
+selectScale = function(key){
+  _f6SelectScale(key);
+  if (SCALE_INFO[key]){ f6PendingScale = key; f6PendingAt = performance.now(); }
+};
+const _f6FlashLayerWord = flashLayerWord;
+flashLayerWord = function(text){
+  _f6FlashLayerWord(text);
+  if (!text) return;                       /* 与既有逻辑一致：无大字时不处理引言 */
+  const q = document.getElementById('layerQuote');
+  if (!q) return;
+  let key = (f6PendingScale && (performance.now() - f6PendingAt) < 600) ? f6PendingScale : null;
+  if (!key){                               /* 回退：按大字文案反查层级（如从封面直接进入太阳系层） */
+    for (const k in LAYER_WORD){ if (LAYER_WORD[k] === text){ key = k; break; } }
+  }
+  f6PendingScale = null;
+  q.textContent = LAYER_QUOTE[key] || '';
+};
+/* 再点一次面板 / 点任意处即结束动画，直接显示完成态 */
+const _panelEl = document.getElementById('panel');
+if (_panelEl) _panelEl.addEventListener('click', () => { if (TW.active) twFinish(); });
+
+/* ---------------- ④ 移动端手势 / 窄屏适配 ---------------- */
+function f6IsTouch(){
+  return ('ontouchstart' in window) || (navigator.maxTouchPoints || 0) > 0;
+}
+function f6ApplyTouchProfile(){
+  controls.touches = { ONE: THREE.TOUCH.ROTATE, TWO: THREE.TOUCH.DOLLY_PAN };  /* 单指旋转 / 双指缩放 */
+  controls.rotateSpeed = 0.78;    /* 触屏略降灵敏度，避免误甩 */
+  controls.zoomSpeed = 0.9;
+  controls.panSpeed = 0.7;
+}
+function f6InitGestures(){
+  if (f6IsTouch()) f6ApplyTouchProfile();
+  const narrow = window.matchMedia('(max-width: 820px)');
+  const collapseIfNarrow = () => { if (narrow.matches && !uiCollapsed) setUiCollapsed(true); };
+  collapseIfNarrow();
+  if (narrow.addEventListener) narrow.addEventListener('change', collapseIfNarrow);
+}
+function f6InitInteraction(){
+  const bb = document.getElementById('bhBtn');
+  if (bb) bb.addEventListener('click', f6FocusBlackHole);
+  /* cosmos 层级内点击黑洞面片：与 OrbitControls 的拖拽互不干扰（仅判定小幅点击） */
+  const ray = new THREE.Raycaster();
+  let down = null;
+  canvas.addEventListener('pointerdown', (e) => { down = { x: e.clientX, y: e.clientY, t: performance.now() }; }, { passive: true });
+  canvas.addEventListener('pointerup', (e) => {
+    const d = down; down = null;
+    if (!d || !F6.bh) return;
+    if (Math.hypot(e.clientX - d.x, e.clientY - d.y) > 7) return;
+    if (performance.now() - d.t > 800) return;
+    if (scaleLevel !== 3 || !F6.bh.visible) return;
+    const rect = canvas.getBoundingClientRect();
+    ray.setFromCamera(new THREE.Vector2(
+      ((e.clientX - rect.left) / rect.width) * 2 - 1,
+      -((e.clientY - rect.top) / rect.height) * 2 + 1
+    ), camera);
+    if (ray.intersectObject(F6.bh, false).length) f6FocusBlackHole();
+  }, { passive: true });
+  /* 光速旅行：四个目标按钮 + 快捷键 L（重按重放） */
+  const btns = document.querySelectorAll('#lightBtns .ghost-btn');
+  for (let i = 0; i < btns.length; i++){
+    btns[i].addEventListener('click', () => f6StartTravel(btns[i].dataset.lt));
+  }
+  window.addEventListener('keydown', (e) => {
+    if (e.key !== 'l' && e.key !== 'L') return;
+    if (e.metaKey || e.ctrlKey || e.altKey) return;
+    const ae = document.activeElement;
+    if (ae && (ae.tagName === 'INPUT' || ae.tagName === 'TEXTAREA')) return;
+    if (COVER.visible) return;
+    f6StartTravel(LT.key || 'earth');
+  });
+}
+
+/* ---------------- 初始化 ---------------- */
+Array.prototype.slice.call(document.querySelectorAll('#bhInfo .kv')).forEach(row => {
+  const v = row.querySelector('.v');
+  if (v) TW_STATIC.set(row, v.textContent);
+});
+f6BuildTrails();
+f6BuildTravel();
+f6InitGestures();
+f6InitInteraction();
+
 animate();
 
 </script>
