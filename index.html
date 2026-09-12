@@ -440,14 +440,60 @@
   @media (max-width:520px){
     #side{width:132px;flex-basis:132px}
   }
+
+  /* ============ 封面层新增：② 终端启动日志 / ③ 真实天文时刻 ============
+     沿用既有极简暗色赛博语言：等宽字 + 荧光青 + 低透明度，无 emoji / 无毛玻璃 / 无渐变滥用 */
+  .cover-term{
+    position:absolute;left:44px;top:104px;width:240px;
+    font-family:ui-monospace,"SF Mono",SFMono-Regular,Menlo,Monaco,"DejaVu Sans Mono","Courier New",monospace;
+    font-size:10px;line-height:1.94;letter-spacing:.01em;
+    color:rgba(126,247,255,.44);text-shadow:0 0 9px rgba(0,229,255,.16);
+    pointer-events:none;overflow:hidden;transition:opacity .55s ease;
+  }
+  .cover-term .tl{white-space:nowrap;opacity:0;animation:tlIn .26s ease forwards}
+  .cover-term .tl b{font-weight:400;color:rgba(126,247,255,.74)}
+  .cover-term .tl.cur::after{
+    content:"";display:inline-block;width:5px;height:8px;margin-left:4px;
+    background:rgba(126,247,255,.6);vertical-align:-1px;
+    animation:caretBlink 1.05s steps(1,end) infinite;
+  }
+  @keyframes tlIn{from{opacity:0;transform:translateY(3px)}to{opacity:1;transform:none}}
+
+  .cover-sky{
+    position:absolute;right:44px;top:104px;text-align:right;
+    font-family:ui-monospace,"SF Mono",SFMono-Regular,Menlo,Monaco,"DejaVu Sans Mono","Courier New",monospace;
+    font-size:10px;line-height:2.05;letter-spacing:.05em;
+    color:rgba(126,247,255,.5);pointer-events:none;transition:opacity .55s ease;
+  }
+  .cover-sky em{font-style:normal;color:rgba(126,247,255,.3);margin-right:9px;letter-spacing:.12em}
+  .cover-sky b{font-weight:400;color:rgba(178,248,255,.72)}
+
+  /* 启动日志滚完前：ENTER 不浮现、底部提示压暗（滚完由 JS 移除 .pending） */
+  #cover.pending .cover-enter{opacity:0;pointer-events:none}
+  #cover.pending .cover-meta{opacity:.22}
+  #cover.off .cover-term,#cover.off .cover-sky{opacity:0}
+
+  @media (max-width:820px){
+    .cover-term{left:20px;top:74px;width:54vw;font-size:8.5px;line-height:1.78}
+    .cover-sky{right:20px;top:74px;font-size:9px;line-height:1.9}
+    .cover-sky em{margin-right:6px}
+  }
 </style>
 </head>
 <body>
 
 <!-- ============ 星图封面 · 第一屏（新增） ============ -->
-<div id="cover">
+<div id="cover" class="pending">
   <div class="cover-bg"></div>
   <canvas id="coverCanvas"></canvas>
+  <!-- ② 终端启动日志：与页面实际加载的 15 张同源贴图一一对应，逐行 [ok]，滚完 ENTER 才浮现 -->
+  <div class="cover-term" id="coverTerm" aria-hidden="true"></div>
+  <!-- ③ 真实天文时刻：此刻太阳直射点经纬度 + 今夜月相（随真实时间刷新） -->
+  <div class="cover-sky">
+    <div><em>太阳直射点</em><b id="skySub">--</b></div>
+    <div><em>今夜月相</em><b id="skyMoon">--</b></div>
+    <div><em>UTC</em><b id="skyClock">--</b></div>
+  </div>
   <div class="cover-word">EARTH</div>
   <div class="cover-logo"><span class="lg-txt">SOLAR SYSTEM</span><small>极简 · 实时 · 科普</small></div>
   <button class="cover-enter" id="coverEnter"><span class="ce-scan"></span>ENTER</button>
@@ -563,6 +609,14 @@
   "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
 }}
 </script>
+<!-- 失效保护：若主模块（CDN/WebGL 异常）未能执行，9s 后强制解除封面 pending，保证 ENTER 仍可见可点 -->
+<script>
+setTimeout(function () {
+  var c = document.getElementById('cover');
+  if (c && c.classList.contains('pending')) c.classList.remove('pending');
+}, 9000);
+</script>
+
 <script type="module">
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
@@ -2472,11 +2526,13 @@ function enterSite(scaleKey){
     if (scaleKey) selectScale(scaleKey);
     return;
   }
+  if (F7.booting && !scaleKey) return;   /* ② 启动日志未滚完：ENTER 尚未浮现，主入口暂不响应 */
   COVER.visible = false;
   coverEl.classList.add('off');
   appEl.classList.remove('enter');
   scaleTrans = null;
-  camPushIn(2.0);
+  if (scaleKey) camPushIn(2.0);          /* 直达某一层级：沿用原有轻推入 */
+  else f7FlyOut();                       /* ① 默认入口：地球 1.2 万 km 高空连续拉远至太阳系全景 */
   try { sessionStorage.setItem('solarCoverSeen', '1'); } catch (e){}
   setTimeout(() => { coverEl.style.display = 'none'; }, 1150);
   if (scaleKey){
@@ -2500,6 +2556,8 @@ function showCover(){
     coverEl.classList.remove('off');
     coverStartLoop();
     coverDecodeWord();
+    f7Sky();        /* ③ 唤回封面立即刷新真实天文时刻 */
+    f7Boot();       /* ② 再次进入：启动日志重新滚动，滚完 ENTER 再浮现 */
   });
 }
 
@@ -3123,6 +3181,167 @@ function f6InitInteraction(){
   });
 }
 
+/* =====================================================================
+   封面层三项新增（内聚收纳，不改动既有层级 / 相机 / 面板逻辑）
+   ① 进入镜头：ENTER 后相机自地球表面约 1.2 万 km 高空连续拉远 3.5s 至太阳系全景
+   ② 终端启动日志：与页面实际加载的 15 张同源贴图一一对应，滚完 ENTER 才浮现
+   ③ 真实天文时刻：此刻太阳直射点经纬度 + 今夜月相百分比，随真实时间更新
+   ===================================================================== */
+const F7 = { booting: false, bootTimer: 0, bootGuard: 0, flyTimer: 0, skyTimer: 0 };
+
+/* ---------- ③ 低精度天文算法（纯 JS 实现，零外部依赖；赤纬/直射点误差约 0.02°） ---------- */
+const F7_D2R = Math.PI / 180, F7_R2D = 180 / Math.PI;
+function f7Days(ms){ return ms / 86400000 + 2440587.5 - 2451545.0; }   /* 自 J2000.0 起的天数 */
+function f7Sun(n){
+  const g = (357.528 + 0.9856003 * n) * F7_D2R;                        /* 太阳平近点角 */
+  const lam = (280.460 + 0.9856474 * n + 1.915 * Math.sin(g) + 0.020 * Math.sin(2 * g)) * F7_D2R;
+  const eps = (23.439 - 0.0000004 * n) * F7_D2R;                        /* 黄赤交角 */
+  return { lam: lam, eps: eps, ra: Math.atan2(Math.cos(eps) * Math.sin(lam), Math.cos(lam)) };
+}
+/* 太阳直射点：纬度 = 太阳赤纬；经度 = 太阳赤经 − 格林尼治恒星时 */
+function f7Subsolar(ms){
+  const n = f7Days(ms), s = f7Sun(n);
+  const lat = Math.asin(Math.sin(s.eps) * Math.sin(s.lam)) * F7_R2D;
+  /* 关键：JS 取模对负数返回负值，故先归化到 0~24h 再转度，避免经度溢出 ±180 */
+  const gmst = ((18.697374558 + 24.06570982441908 * n) % 24 + 24) % 24 * 15;
+  let lon = s.ra * F7_R2D - gmst;
+  lon = ((lon + 540) % 360) - 180;
+  return { lat: lat, lon: lon };
+}
+/* 月相：用月球真黄经与太阳真黄经之差（含中心差等主要项），优于"平均月龄"近似 */
+function f7Moon(ms){
+  const n = f7Days(ms);
+  const Lm = (218.316 + 13.176396 * n) * F7_D2R;                        /* 月球平黄经 */
+  const Mm = (134.963 + 13.064993 * n) * F7_D2R;                        /* 月球平近点角 */
+  const Dm = (297.850 + 12.190749 * n) * F7_D2R;                        /* 平均距角 */
+  const Ms = (357.528 + 0.9856003 * n) * F7_D2R;                        /* 太阳平近点角 */
+  const lamMoon = Lm + (6.289 * Math.sin(Mm) + 1.274 * Math.sin(2 * Dm - Mm)
+                      + 0.658 * Math.sin(2 * Dm) + 0.214 * Math.sin(2 * Mm)
+                      - 0.186 * Math.sin(Ms)) * F7_D2R;
+  let e = (lamMoon - f7Sun(n).lam) * F7_R2D;                            /* 月日黄经差，>0 为盈 */
+  e = ((e + 540) % 360) - 180;
+  const a = Math.abs(e);
+  const illum = (1 - Math.cos(a * F7_D2R)) / 2;                         /* 被照亮比例 */
+  let name = '满月';
+  if (a < 22.5) name = '新月';
+  else if (a < 67.5) name = e > 0 ? '娥眉月' : '残月';
+  else if (a < 112.5) name = e > 0 ? '上弦月' : '下弦月';
+  else if (a < 157.5) name = e > 0 ? '盈凸月' : '亏凸月';
+  return { illum: illum, name: name };
+}
+function f7Sky(){
+  if (!COVER.visible) return;
+  const d = new Date(), ms = d.getTime();
+  const sub = f7Subsolar(ms), moon = f7Moon(ms);
+  const p2 = v => String(v).padStart(2, '0');
+  const set = (id, txt) => { const el = document.getElementById(id); if (el) el.textContent = txt; };
+  set('skySub', Math.abs(sub.lat).toFixed(1) + '°' + (sub.lat >= 0 ? 'N' : 'S') + ' · '
+              + Math.abs(sub.lon).toFixed(1) + '°' + (sub.lon >= 0 ? 'E' : 'W'));
+  set('skyMoon', moon.name + ' · ' + (moon.illum * 100 < 10 ? (moon.illum * 100).toFixed(1) : Math.round(moon.illum * 100)) + '%');
+  set('skyClock', d.getUTCFullYear() + '-' + p2(d.getUTCMonth() + 1) + '-' + p2(d.getUTCDate()) + ' '
+              + p2(d.getUTCHours()) + ':' + p2(d.getUTCMinutes()) + ':' + p2(d.getUTCSeconds()));
+}
+
+/* ---------- ② 终端启动日志：15 张同源贴图（名称取真实文件名主干，尺寸取文件真实像素） ---------- */
+const F7_TEX = [
+  { n: 'sun',               f: '2k_sun.jpg',               w: 2048, h: 1024 },
+  { n: 'mercury',           f: '2k_mercury.jpg',           w: 2048, h: 1024 },
+  { n: 'venus_surface',     f: '2k_venus_surface.jpg',     w: 2048, h: 1024 },
+  { n: 'venus_atmosphere',  f: '2k_venus_atmosphere.jpg',  w: 2048, h: 1024 },
+  { n: 'earth_daymap',      f: '2k_earth_daymap.jpg',      w: 2048, h: 1024 },
+  { n: 'earth_nightmap',    f: '2k_earth_nightmap.jpg',    w: 2048, h: 1024 },
+  { n: 'earth_normal_2048', f: 'earth_normal_2048.jpg',    w: 2048, h: 1024 },
+  { n: 'earth_clouds_1024', f: 'earth_clouds_1024.png',    w: 1024, h: 512  },
+  { n: 'moon',              f: '2k_moon.jpg',              w: 2048, h: 1024 },
+  { n: 'mars',              f: '2k_mars.jpg',              w: 2048, h: 1024 },
+  { n: 'jupiter',           f: '2k_jupiter.jpg',           w: 2048, h: 1024 },
+  { n: 'saturn',            f: '2k_saturn.jpg',            w: 2048, h: 1024 },
+  { n: 'saturn_ring_alpha', f: '2k_saturn_ring_alpha.png', w: 2048, h: 125  },
+  { n: 'uranus',            f: '2k_uranus.jpg',            w: 2048, h: 1024 },
+  { n: 'neptune',           f: '2k_neptune.jpg',           w: 2048, h: 1024 }
+];
+function f7Pad(s, len){ while (s.length < len) s += ' '; return s; }
+/* 真实加载数：以浏览器实际发起的资源请求为准统计（不是写死的 15） */
+function f7RealTex(){
+  try {
+    const seen = new Set(performance.getEntriesByType('resource')
+      .map(e => e.name.split('?')[0].split('/').pop()));
+    let hit = 0;
+    F7_TEX.forEach(t => { if (seen.has(t.f)) hit++; });
+    return hit;
+  } catch (err){ return F7_TEX.length; }
+}
+function f7BootDone(){
+  if (!F7.booting) return;
+  F7.booting = false;
+  clearTimeout(F7.bootTimer); clearTimeout(F7.bootGuard);
+  const term = document.getElementById('coverTerm');
+  if (term){ const cur = term.querySelector('.tl.cur'); if (cur) cur.classList.remove('cur'); }
+  coverEl.classList.remove('pending');            /* 日志滚完：ENTER 才浮现 */
+}
+function f7Boot(){
+  const term = document.getElementById('coverTerm');
+  if (!term) return;
+  clearTimeout(F7.bootTimer); clearTimeout(F7.bootGuard);
+  term.innerHTML = '';
+  coverEl.classList.add('pending');
+  F7.booting = true;
+  const total = F7_TEX.length + 2;
+  let i = 0;
+  const step = () => {
+    if (!F7.booting) return;
+    if (i >= total){ f7BootDone(); return; }
+    let html;
+    if (i === 0) html = '<b>[boot]</b> renderer ready · three r160';
+    else if (i === total - 1) html = '<b>[ready]</b> ' + f7RealTex() + '/' + F7_TEX.length + ' textures';
+    else { const t = F7_TEX[i - 1]; html = '<b>[ok]</b> ' + f7Pad(t.n, 19) + ' ' + t.w + '×' + t.h; }
+    const prev = term.querySelector('.tl.cur');
+    if (prev) prev.classList.remove('cur');
+    const div = document.createElement('div');
+    div.className = 'tl' + (i < total - 1 ? ' cur' : '');
+    div.innerHTML = html;
+    term.appendChild(div);
+    i++;
+    F7.bootTimer = setTimeout(step, 150);
+  };
+  F7.bootGuard = setTimeout(f7BootDone, 7000);    /* 兜底：任何异常都不阻塞进入 */
+  F7.bootTimer = setTimeout(step, 340);
+}
+
+/* ---------- ① 进入镜头：地球表面 1.2 万 km 高空 → 太阳系全景（3.5s 连续拉远） ---------- */
+const F7_ALT_KM = 12000, F7_R_KM = 6371, F7_FLY_DUR = 3.5;
+const F7_END = new THREE.Vector3(0, 34, 90);      /* 与 SCALE_INFO.solar 全景机位一致 */
+function f7FlyOut(){
+  followKey = null; followTrans = null;
+  if (scaleLevel !== 0) selectScale('solar');     /* 保证从太阳系层级的地球出发 */
+  const earth = bodyWorld('earth', new THREE.Vector3());
+  const toEnd = F7_END.clone().sub(earth).normalize();
+  /* 起始方位：偏向日照面（42% 朝阳 + 58% 朝全景机位），地球呈盈凸、可见晨昏线 */
+  const dir = earth.clone().negate().normalize().multiplyScalar(0.42)
+                   .add(toEnd.multiplyScalar(0.58)).normalize();
+  /* 地球视觉半径 0.32 场景单位对应真实半径 6371 km：1.2 万 km 高度 = 0.32 × (18371/6371) ≈ 0.92 */
+  const dist = BODY.earth.visR * (1 + F7_ALT_KM / F7_R_KM);
+  const wasPaused = ttPaused;
+  if (!wasPaused) pauseSim();                     /* 拉远期间冻结公转：地球不位移，镜头不抖 */
+  controls.minDistance = 0.4;                     /* 近地时放开轨道控制器最小距离夹紧 */
+  scaleTrans = {
+    t: 0, dur: F7_FLY_DUR,
+    startPos: earth.clone().addScaledVector(dir, dist), startTgt: earth.clone(),
+    endPos: F7_END.clone(), endTgt: new THREE.Vector3(0, 0, 0)
+  };
+  clearTimeout(F7.flyTimer);
+  F7.flyTimer = setTimeout(() => {
+    controls.minDistance = 2.2;
+    if (!wasPaused) resumeSim();
+  }, F7_FLY_DUR * 1000 + 60);
+}
+function f7Init(){
+  f7Sky();
+  clearInterval(F7.skyTimer);
+  F7.skyTimer = setInterval(f7Sky, 1000);         /* ③ 每秒按真实时间刷新 */
+  if (COVER.visible) f7Boot();                    /* ② 首屏即开始滚动启动日志 */
+}
+
 /* ---------------- 初始化 ---------------- */
 Array.prototype.slice.call(document.querySelectorAll('#bhInfo .kv')).forEach(row => {
   const v = row.querySelector('.v');
@@ -3132,6 +3351,7 @@ f6BuildTrails();
 f6BuildTravel();
 f6InitGestures();
 f6InitInteraction();
+f7Init();          /* 封面层新增：③ 真实天文时刻时钟 + ② 首屏启动日志 */
 
 animate();
 
